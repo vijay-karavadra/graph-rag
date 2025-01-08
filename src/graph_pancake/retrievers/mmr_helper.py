@@ -1,15 +1,45 @@
+
 import dataclasses
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import (
+    TYPE_CHECKING,
+    Iterable,
+)
 
 import numpy as np
-from graph_pancake.utils.math import cosine_similarity
-
-from ..node import Node
-from .node_selector import NodeSelector
-
+from langchain_core.documents import Document
 from numpy.typing import NDArray
 
+
+from graph_pancake.utils.math import cosine_similarity
+from .embedded_document import EmbeddedDocument
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 NEG_INF = float("-inf")
+
+@dataclasses.dataclass
+class _Candidate:
+    doc: Document
+    similarity: float
+    weighted_similarity: float
+    weighted_redundancy: float
+    score: float = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.score = self.weighted_similarity - self.weighted_redundancy
+
+    @property
+    def id(self) -> str:
+        if self.doc.id is None:
+            msg = "All documents should have ids"
+            raise ValueError(msg)
+        return self.doc.id
+
+    def update_redundancy(self, new_weighted_redundancy: float) -> None:
+        if new_weighted_redundancy > self.weighted_redundancy:
+            self.weighted_redundancy = new_weighted_redundancy
+            self.score = self.weighted_similarity - self.weighted_redundancy
 
 
 def _emb_to_ndarray(embedding: list[float]) -> NDArray[np.float32]:
@@ -19,26 +49,9 @@ def _emb_to_ndarray(embedding: list[float]) -> NDArray[np.float32]:
     return emb_array
 
 
-@dataclasses.dataclass
-class _MmrCandidate:
-    id: str
-    embedding: list[float]
-    similarity: float
-    weighted_similarity: float
-    weighted_redundancy: float
-    score: float = dataclasses.field(init=False)
-
-    def __post_init__(self) -> None:
-        self.score = self.weighted_similarity - self.weighted_redundancy
-
-    def update_redundancy(self, new_weighted_redundancy: float) -> None:
-        if new_weighted_redundancy > self.weighted_redundancy:
-            self.weighted_redundancy = new_weighted_redundancy
-            self.score = self.weighted_similarity - self.weighted_redundancy
-
-
-class MmrScoringNodeSelector:
+class MmrHelper:
     """Helper for executing an MMR traversal query.
+
     Args:
         query_embedding: The embedding of the query to use for scoring.
         lambda_mult: Number between 0 and 1 that determines the degree
@@ -56,6 +69,7 @@ class MmrScoringNodeSelector:
 
     lambda_mult: float
     """Number between 0 and 1.
+
     Determines the degree of diversity among the results with 0 corresponding to
     maximum diversity and 1 to minimum diversity."""
 
@@ -73,8 +87,9 @@ class MmrScoringNodeSelector:
 
     candidate_id_to_index: dict[str, int]
     """Dictionary of candidate IDs to indices in candidates and candidate_embeddings."""
-    candidates: list[_MmrCandidate]
+    candidates: list[_Candidate]
     """List containing information about candidates.
+
     Same order as rows in `candidate_embeddings`.
     """
     candidate_embeddings: NDArray[np.float32]
@@ -83,22 +98,10 @@ class MmrScoringNodeSelector:
     best_score: float
     best_id: str | None
 
-    @staticmethod
-    def factory(
-        *, lambda_mult: float = 0.5, score_threshold: float = NEG_INF
-    ) -> Callable[[list[float]], NodeSelector]:
-        return lambda k, query_embedding: MmrScoringNodeSelector(
-            k,
-            query_embedding,
-            lambda_mult=lambda_mult,
-            score_threshold=score_threshold,
-        )
-
     def __init__(
         self,
         k: int,
         query_embedding: list[float],
-        *,
         lambda_mult: float = 0.5,
         score_threshold: float = NEG_INF,
     ) -> None:
@@ -136,8 +139,9 @@ class MmrScoringNodeSelector:
 
     def _pop_candidate(
         self, candidate_id: str
-    ) -> tuple[_MmrCandidate, NDArray[np.float32]]:
+    ) -> tuple[Document, float, NDArray[np.float32]]:
         """Pop the candidate with the given ID.
+
         Returns:
             The document, similarity score, and embedding of the candidate.
         """
@@ -156,10 +160,14 @@ class MmrScoringNodeSelector:
         # candidate_embeddings.
         last_index = self.candidate_embeddings.shape[0] - 1
 
+        similarity = 0.0
         if index == last_index:
-            self.candidates.pop()
+            # Already the last item. We don't need to swap.
+            similarity = self.candidates.pop().similarity
         else:
             self.candidate_embeddings[index] = self.candidate_embeddings[last_index]
+
+            similarity = self.candidates[index].similarity
 
             old_last = self.candidates.pop()
             self.candidates[index] = old_last
@@ -169,37 +177,33 @@ class MmrScoringNodeSelector:
             0
         ]
 
-        return candidate, embedding
+        return candidate.doc, similarity, embedding
 
-    def select_nodes(self, *, limit: int) -> Iterable[Node]:
+    def pop_best(self) -> Document | None:
         """Select and pop the best item being considered.
+
         Updates the consideration set based on it.
+
         Returns:
             A tuple containing the ID of the best item.
         """
-        if limit == 0:
-            return []
         if self.best_id is None or self.best_score < self.score_threshold:
-            return []
+            return None
 
         # Get the selection and remove from candidates.
         selected_id = self.best_id
-        selected, selected_embedding = self._pop_candidate(selected_id)
+        selected_doc, selected_similarity, selected_embedding = self._pop_candidate(
+            selected_id
+        )
 
         # Add the ID and embedding to the selected information.
         selection_index = len(self.selected_ids)
         self.selected_ids.append(selected_id)
         self.selected_embeddings[selection_index] = selected_embedding
 
-        # Create the selected result node.
-        selected_node = Node(
-            id=selected_id,
-            embedding=selected.embedding,
-            extra_metadata={
-                "_similarity_score": selected.similarity,
-                "_mmr_score": self.best_socre,
-            },
-        )
+        # Set the scores in the doc metadata
+        selected_doc.metadata["_similarity_score"] = selected_similarity
+        selected_doc.metadata["_mmr_score"] = self.best_score
 
         # Reset the best score / best ID.
         self.best_score = NEG_INF
@@ -216,15 +220,16 @@ class MmrScoringNodeSelector:
                     self.best_score = candidate.score
                     self.best_id = candidate.id
 
-        return [selected_node]
+        return selected_doc
 
-    def add_nodes(self, nodes: dict[str, Node]) -> None:
+    def add_candidates(
+        self, candidates: dict[str, EmbeddedDocument], depth_found: int
+    ) -> None:
         """Add candidates to the consideration set."""
         # Determine the keys to actually include.
         # These are the candidates that aren't already selected
         # or under consideration.
-
-        include_ids_set = set(nodes.keys())
+        include_ids_set = set(candidates.keys())
         include_ids_set.difference_update(self.selected_ids)
         include_ids_set.difference_update(self.candidate_id_to_index.keys())
         include_ids = list(include_ids_set)
@@ -239,8 +244,9 @@ class MmrScoringNodeSelector:
         )
         offset = self.candidate_embeddings.shape[0]
         for index, candidate_id in enumerate(include_ids):
-            self.candidate_id_to_index[candidate_id] = offset + index
-            new_embeddings[index] = nodes[candidate_id].embedding
+            if candidate_id in include_ids:
+                self.candidate_id_to_index[candidate_id] = offset + index
+                new_embeddings[index] = candidates[candidate_id].embedding
 
         # Compute the similarity to the query.
         similarity = cosine_similarity(new_embeddings, self.query_embedding)
@@ -254,12 +260,13 @@ class MmrScoringNodeSelector:
             max_redundancy = 0.0
             if redundancy.shape[0] > 0:
                 max_redundancy = redundancy[index].max()
-            candidate = _MmrCandidate(
-                id=candidate_id,
+            candidate = _Candidate(
+                doc=candidates[candidate_id].document(),
                 similarity=similarity[index][0],
                 weighted_similarity=self.lambda_mult * similarity[index][0],
                 weighted_redundancy=self.lambda_mult_complement * max_redundancy,
             )
+            candidate.doc.metadata["_depth_found"] = depth_found
             self.candidates.append(candidate)
 
             if candidate.score >= self.best_score:
@@ -273,3 +280,4 @@ class MmrScoringNodeSelector:
                 new_embeddings,
             )
         )
+

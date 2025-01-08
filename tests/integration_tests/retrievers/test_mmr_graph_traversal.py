@@ -1,3 +1,5 @@
+"""Test of Apache Cassandra graph index class `Cassandra`"""
+
 import json
 import os
 from contextlib import contextmanager
@@ -10,18 +12,14 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from pytest import FixtureRequest
 
-
-from graph_pancake.retrievers.generic_graph_traversal_retriever import GenericGraphTraversalRetriever
-from graph_pancake.retrievers.node_selectors import MmrScoringNodeSelector
-
-from graph_pancake.retrievers.traversal_adapters.generic import (
-    AstraGraphTraversalAdapter,
-    CassandraGraphTraversalAdapter,
-    ChromaGraphTraversalAdapter,
-    GraphTraversalAdapter,
-    OpenSearchGraphTraversalAdapter,
+from graph_pancake.retrievers.graph_mmr_traversal_retriever import GraphMMRTraversalRetriever
+from graph_pancake.retrievers.traversal_adapters.mmr import (
+    AstraMMRTraversalAdapter,
+    CassandraMMRTraversalAdapter,
+    ChromaMMRTraversalAdapter,
+    MMRTraversalAdapter,
+    OpenSearchMMRTraversalAdapter,
 )
-
 from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from fake_embeddings import (
     AngularTwoDimensionalEmbeddings,
@@ -239,7 +237,8 @@ def vector_store(
             engine="faiss",
         )
         yield store
-        store.delete_index()  # store.index_name
+        if store.index_exists:
+            store.delete_index()  # store.index_name
     else:
         msg = f"Unknown vector store type: {vector_store_type}"
         raise ValueError(msg)
@@ -247,15 +246,15 @@ def vector_store(
 
 def get_adapter(
     vector_store: VectorStore, vector_store_type: str
-) -> GraphTraversalAdapter:
+) -> MMRTraversalAdapter:
     if vector_store_type == "astra-db":
-        return AstraGraphTraversalAdapter(vector_store=vector_store)
+        return AstraMMRTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "cassandra":
-        return CassandraGraphTraversalAdapter(vector_store=vector_store)
+        return CassandraMMRTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "chroma-db":
-        return ChromaGraphTraversalAdapter(vector_store=vector_store)
+        return ChromaMMRTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "open-search":
-        return OpenSearchGraphTraversalAdapter(vector_store=vector_store)
+        return OpenSearchMMRTraversalAdapter(vector_store=vector_store)
     else:
         msg = f"Unknown vector store type: {vector_store_type}"
         raise ValueError(msg)
@@ -298,10 +297,9 @@ def test_mmr_traversal(vector_store: VectorStore, vector_store_type: str) -> Non
         vector_store_type=vector_store_type,
     )
 
-    retriever = GenericGraphTraversalRetriever(
+    retriever = GraphMMRTraversalRetriever(
         store=vector_store_adapter,
         edges=[("outgoing", "incoming")],
-        node_selector_factory = MmrScoringNodeSelector.factory(),
         fetch_k=2,
         k=2,
         depth=2,
@@ -352,11 +350,10 @@ class TestMmrGraphTraversal:
             vector_store_type=vector_store_type,
         )
 
-        retriever = GenericGraphTraversalRetriever(
+        retriever = GraphMMRTraversalRetriever(
             store=vector_store_adapter,
             vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
             depth=2,
             k=2,
         )
@@ -383,11 +380,10 @@ class TestMmrGraphTraversal:
             vector_store_type=vector_store_type,
         )
 
-        retriever = GenericGraphTraversalRetriever(
+        retriever = GraphMMRTraversalRetriever(
             store=vector_store_adapter,
             vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
             depth=2,
             k=2,
         )

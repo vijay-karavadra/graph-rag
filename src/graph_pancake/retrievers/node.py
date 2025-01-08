@@ -1,8 +1,8 @@
-import dataclasses
+from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclasses.dataclass
+@dataclass
 class Node:
     """Information about a node during the traversal."""
 
@@ -20,8 +20,8 @@ class Node:
 
     embedding: list[float]
 
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = field(default_factory=dict)
     """Metadata from the original document."""
 
-    extra_metadata: dict[str, Any] = {}
+    extra_metadata: dict[str, Any] = field(default_factory=dict)
     """Metadata to add to the original document for the results."""
