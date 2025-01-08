@@ -10,12 +10,10 @@ from typing import (
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
-from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
-
-from .graph_traversal_adapter import GraphTraversalAdapter
+from .base import METADATA_EMBEDDING_KEY, StoreAdapter
 
 
-class OpenSearchGraphTraversalAdapter(GraphTraversalAdapter):
+class OpenSearchStoreAdapter(StoreAdapter):
     def __init__(self, vector_store: VectorStore):
         from langchain_community.vectorstores import OpenSearchVectorSearch
 

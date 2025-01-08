@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from .edge import Edge
+
 
 @dataclass
 class Node:
@@ -20,8 +22,16 @@ class Node:
 
     embedding: list[float]
 
+    incoming_edges: set[Edge]
+    outgoing_edges: set[Edge]
+
     metadata: dict[str, Any] = field(default_factory=dict)
-    """Metadata from the original document."""
+    """Metadata from the original document.
+
+    This is a reference to the original document metadata, and should not be modified.
+    Instead, modify `extra_metadata` which will be used as overrides when the final
+    document is produced.
+    """
 
     extra_metadata: dict[str, Any] = field(default_factory=dict)
     """Metadata to add to the original document for the results."""

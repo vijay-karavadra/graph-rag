@@ -1,34 +1,24 @@
 from typing import (
-    TYPE_CHECKING,
     Any,
     Dict,
     List,
     Optional,
     Sequence,
     Tuple,
-    cast,
 )
 
+try:
+    from langchain_astradb import AstraDBVectorStore
+except (ImportError, ModuleNotFoundError):
+    raise ImportError("please `pip install langchain-astradb`")
 from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
 
-if TYPE_CHECKING:
-    pass
-
-from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
-
-from .graph_traversal_adapter import GraphTraversalAdapter
+from .base import METADATA_EMBEDDING_KEY, StoreAdapter
 
 
-class AstraGraphTraversalAdapter(GraphTraversalAdapter):
-    def __init__(self, vector_store: VectorStore):
-        try:
-            from langchain_astradb import AstraDBVectorStore
-        except (ImportError, ModuleNotFoundError):
-            msg = "please `pip install langchain-astradb`"
-            raise ImportError(msg)
-
-        self._vector_store = cast(AstraDBVectorStore, vector_store)
+class AstraStoreAdapter(StoreAdapter[AstraDBVectorStore]):
+    def __init__(self, vector_store: AstraDBVectorStore):
+        self.vector_store = vector_store
 
     def _build_docs(
         self, docs_with_embeddings: list[tuple[Document, list[float]]]
@@ -48,7 +38,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
     ) -> Tuple[List[float], List[Document]]:
         """Returns docs (with embeddings) most similar to the query."""
         query_embedding, docs_with_embeddings = (
-            self._vector_store.similarity_search_with_embedding(
+            self.vector_store.similarity_search_with_embedding(
                 query=query,
                 k=k,
                 filter=filter,
@@ -70,7 +60,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
         (
             query_embedding,
             docs_with_embeddings,
-        ) = await self._vector_store.asimilarity_search_with_embedding(
+        ) = await self.vector_store.asimilarity_search_with_embedding(
             query=query,
             k=k,
             filter=filter,
@@ -89,7 +79,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
     ) -> List[Document]:
         """Returns docs (with embeddings) most similar to the query vector."""
         docs_with_embeddings = (
-            self._vector_store.similarity_search_with_embedding_by_vector(
+            self.vector_store.similarity_search_with_embedding_by_vector(
                 embedding=embedding,
                 k=k,
                 filter=filter,
@@ -107,7 +97,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
     ) -> List[Document]:
         """Returns docs (with embeddings) most similar to the query vector."""
         docs_with_embeddings = (
-            await self._vector_store.asimilarity_search_with_embedding_by_vector(
+            await self.vector_store.asimilarity_search_with_embedding_by_vector(
                 embedding=embedding,
                 k=k,
                 filter=filter,
@@ -120,7 +110,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
         """Get documents by id."""
         docs: list[Document] = []
         for id in ids:
-            doc = self._vector_store.get_by_document_id(id, **kwargs)
+            doc = self.vector_store.get_by_document_id(id, **kwargs)
             if doc is not None:
                 docs.append(doc)
         return docs
@@ -129,7 +119,7 @@ class AstraGraphTraversalAdapter(GraphTraversalAdapter):
         """Get documents by id."""
         docs: list[Document] = []
         for id in ids:
-            doc = await self._vector_store.aget_by_document_id(id, **kwargs)
+            doc = await self.vector_store.aget_by_document_id(id, **kwargs)
             if doc is not None:
                 docs.append(doc)
         return docs
