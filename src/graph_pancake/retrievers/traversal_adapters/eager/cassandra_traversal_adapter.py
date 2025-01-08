@@ -1,10 +1,6 @@
-
 from typing import (
     Any,
-    Dict,
     List,
-    Optional,
-
     cast,
 )
 
@@ -12,6 +8,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
 from .traversal_adapter import TraversalAdapter
+
 
 class CassandraTraversalAdapter(TraversalAdapter):
     def __init__(self, vector_store: VectorStore):

@@ -4,27 +4,26 @@ from contextlib import contextmanager
 from typing import Any, Generator, Iterable
 
 import pytest
+from fake_embeddings import (
+    AngularTwoDimensionalEmbeddings,
+)
 from langchain_chroma import Chroma
+from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from pytest import FixtureRequest
 
-
-from graph_pancake.retrievers.generic_graph_traversal_retriever import GenericGraphTraversalRetriever
+from graph_pancake.retrievers.generic_graph_traversal_retriever import (
+    GenericGraphTraversalRetriever,
+)
 from graph_pancake.retrievers.node_selectors import MmrScoringNodeSelector
-
 from graph_pancake.retrievers.traversal_adapters.generic import (
     AstraGraphTraversalAdapter,
     CassandraGraphTraversalAdapter,
     ChromaGraphTraversalAdapter,
     GraphTraversalAdapter,
     OpenSearchGraphTraversalAdapter,
-)
-
-from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
-from fake_embeddings import (
-    AngularTwoDimensionalEmbeddings,
 )
 
 vector_store_types = [
@@ -301,7 +300,7 @@ def test_mmr_traversal(vector_store: VectorStore, vector_store_type: str) -> Non
     retriever = GenericGraphTraversalRetriever(
         store=vector_store_adapter,
         edges=[("outgoing", "incoming")],
-        node_selector_factory = MmrScoringNodeSelector.factory(),
+        node_selector_factory=MmrScoringNodeSelector.factory(),
         fetch_k=2,
         k=2,
         depth=2,
@@ -356,7 +355,7 @@ class TestMmrGraphTraversal:
             store=vector_store_adapter,
             vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
+            node_selector_factory=MmrScoringNodeSelector.factory(),
             depth=2,
             k=2,
         )
@@ -387,7 +386,7 @@ class TestMmrGraphTraversal:
             store=vector_store_adapter,
             vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
+            node_selector_factory=MmrScoringNodeSelector.factory(),
             depth=2,
             k=2,
         )

@@ -1,4 +1,3 @@
-
 from typing import (
     Any,
     Dict,
@@ -11,8 +10,10 @@ from typing import (
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
-from .mmr_traversal_adapter import MMRTraversalAdapter
 from graph_pancake.retrievers.document_cache import METADATA_EMBEDDING_KEY
+
+from .mmr_traversal_adapter import MMRTraversalAdapter
+
 
 class ChromaMMRTraversalAdapter(MMRTraversalAdapter):
     def __init__(self, vector_store: VectorStore):
@@ -85,4 +86,3 @@ class ChromaMMRTraversalAdapter(MMRTraversalAdapter):
                 results["documents"], results["metadatas"], results["ids"]
             )
         ]
-

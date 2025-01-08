@@ -20,8 +20,8 @@ from .node import Node
 from .node_selectors.node_selector import NodeSelector
 from .traversal_adapters.generic.graph_traversal_adapter import GraphTraversalAdapter
 
-
 BASIC_TYPES = (str, bool, int, float, complex, bytes)
+
 
 # this class uses pydantic, so store and edges
 # must be provided at init time.

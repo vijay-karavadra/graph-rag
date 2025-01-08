@@ -1,10 +1,8 @@
-
 from typing import (
     Any,
     List,
     Sequence,
     Tuple,
-
     cast,
 )
 
@@ -12,7 +10,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
 from .mmr_traversal_adapter import MMRTraversalAdapter
-from graph_pancake.retrievers.document_cache import METADATA_EMBEDDING_KEY
+
 
 class CassandraMMRTraversalAdapter(MMRTraversalAdapter):
     def __init__(self, vector_store: VectorStore):
@@ -59,4 +57,3 @@ class CassandraMMRTraversalAdapter(MMRTraversalAdapter):
             if doc is not None:
                 docs.append(doc)
         return docs
-

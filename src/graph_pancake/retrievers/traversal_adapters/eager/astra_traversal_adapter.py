@@ -1,11 +1,9 @@
-
 from typing import (
     Any,
     Dict,
     List,
     Optional,
     Tuple,
-
     cast,
 )
 
@@ -13,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
 from .traversal_adapter import TraversalAdapter
+
 
 class AstraTraversalAdapter(TraversalAdapter):
     def __init__(self, vector_store: VectorStore):

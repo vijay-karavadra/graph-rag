@@ -8,16 +8,16 @@ from typing import Any, Generator, Iterable, List
 
 import pytest
 from langchain_chroma import Chroma
+from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from pytest import FixtureRequest
 
-from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
-
-from graph_pancake.retrievers.generic_graph_traversal_retriever import GenericGraphTraversalRetriever
+from graph_pancake.retrievers.generic_graph_traversal_retriever import (
+    GenericGraphTraversalRetriever,
+)
 from graph_pancake.retrievers.node_selectors import EagerNodeSelector
-
 from graph_pancake.retrievers.traversal_adapters.generic import (
     AstraGraphTraversalAdapter,
     CassandraGraphTraversalAdapter,
@@ -318,7 +318,7 @@ def test_traversal(
     retriever = GenericGraphTraversalRetriever(
         store=vector_store_adapter,
         edges=[("outgoing", "incoming"), "keywords"],
-        node_selector_factory = EagerNodeSelector.factory(),
+        node_selector_factory=EagerNodeSelector.factory(),
         start_k=2,
         max_depth=2,
     )
@@ -365,7 +365,7 @@ class TestGraphTraversal:
         retriever = GenericGraphTraversalRetriever(
             store=vector_store_adapter,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = EagerNodeSelector.factory(),
+            node_selector_factory=EagerNodeSelector.factory(),
             max_depth=2,
             start_k=2,
         )
@@ -401,7 +401,7 @@ class TestGraphTraversal:
         retriever = GenericGraphTraversalRetriever(
             store=vector_store_adapter,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = EagerNodeSelector.factory(),
+            node_selector_factory=EagerNodeSelector.factory(),
             max_depth=2,
             start_k=2,
         )

@@ -8,6 +8,7 @@ from typing import Any, Generator, Iterable, List
 
 import pytest
 from langchain_chroma import Chroma
+from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -21,7 +22,6 @@ from graph_pancake.retrievers.traversal_adapters.eager import (
     OpenSearchTraversalAdapter,
     TraversalAdapter,
 )
-from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 
 vector_store_types = [
     "astra-db",

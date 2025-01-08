@@ -1,4 +1,3 @@
-
 from abc import abstractmethod
 from typing import (
     Any,
@@ -13,6 +12,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables import run_in_executor
 from langchain_core.vectorstores import VectorStore
+
 
 class MMRTraversalAdapter:
     _base_vector_store: VectorStore
