@@ -33,7 +33,9 @@ class GLiNEREntityExtractor(BaseDocumentTransformer):
         from langchain_community.document_transformers import GLiNEREntityExtractor
         from langchain_text_splitters import CharacterTextSplitter
 
-        loader = WebBaseLoader("https://raw.githubusercontent.com/hwchase17/chat-your-data/master/state_of_the_union.txt")
+        loader = WebBaseLoader(
+            "https://raw.githubusercontent.com/hwchase17/chat-your-data/master/state_of_the_union.txt"
+        )
         raw_documents = loader.load()
 
         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)

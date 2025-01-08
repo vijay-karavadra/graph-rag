@@ -142,7 +142,9 @@ class HtmlHyperlinkExtractor(BaseDocumentTransformer):
         )
 
         documents = loader.load()
-        transformer = LinkExtractorTransformer([HtmlLinkExtractor().as_document_extractor()])
+        transformer = LinkExtractorTransformer(
+            [HtmlLinkExtractor().as_document_extractor()]
+        )
         documents = transformer.transform_documents(documents)
 
         documents[0].metadata["links"][:5]

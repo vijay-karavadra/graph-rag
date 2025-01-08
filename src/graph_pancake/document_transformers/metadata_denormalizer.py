@@ -16,14 +16,13 @@ class MetadataDenormalizer(BaseDocumentTransformer):
     .. code-block:: python
 
         from langchain_core.documents import Document
-        from langchain_community.document_transformers.metadata_denormalizer import MetadataDenormalizer
+        from langchain_community.document_transformers.metadata_denormalizer import (
+            MetadataDenormalizer,
+        )
 
         doc = Document(
             page_content="test",
-            metadata={
-                "place": ["berlin", "paris"],
-                "topic": ["weather"]
-            }
+            metadata={"place": ["berlin", "paris"], "topic": ["weather"]},
         )
 
         de_normalizer = MetadataDenormalizer()
