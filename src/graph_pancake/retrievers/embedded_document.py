@@ -1,14 +1,10 @@
-
 import dataclasses
-
 from typing import Any
-
 
 from langchain_core.documents import Document
 
-
-
 METADATA_EMBEDDING_KEY = "__embedding"
+
 
 @dataclasses.dataclass
 class EmbeddedDocument:

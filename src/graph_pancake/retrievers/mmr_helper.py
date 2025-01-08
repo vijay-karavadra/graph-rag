@@ -1,4 +1,3 @@
-
 import dataclasses
 from typing import (
     TYPE_CHECKING,
@@ -9,14 +8,15 @@ import numpy as np
 from langchain_core.documents import Document
 from numpy.typing import NDArray
 
-
 from graph_pancake.utils.math import cosine_similarity
+
 from .embedded_document import EmbeddedDocument
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 NEG_INF = float("-inf")
+
 
 @dataclasses.dataclass
 class _Candidate:
@@ -280,4 +280,3 @@ class MmrHelper:
                 new_embeddings,
             )
         )
-

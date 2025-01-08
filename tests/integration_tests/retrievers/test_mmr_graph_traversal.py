@@ -6,23 +6,25 @@ from contextlib import contextmanager
 from typing import Any, Generator, Iterable
 
 import pytest
+from fake_embeddings import (
+    AngularTwoDimensionalEmbeddings,
+)
 from langchain_chroma import Chroma
+from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from pytest import FixtureRequest
 
-from graph_pancake.retrievers.graph_mmr_traversal_retriever import GraphMMRTraversalRetriever
+from graph_pancake.retrievers.graph_mmr_traversal_retriever import (
+    GraphMMRTraversalRetriever,
+)
 from graph_pancake.retrievers.traversal_adapters.mmr import (
     AstraMMRTraversalAdapter,
     CassandraMMRTraversalAdapter,
     ChromaMMRTraversalAdapter,
     MMRTraversalAdapter,
     OpenSearchMMRTraversalAdapter,
-)
-from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
-from fake_embeddings import (
-    AngularTwoDimensionalEmbeddings,
 )
 
 vector_store_types = [

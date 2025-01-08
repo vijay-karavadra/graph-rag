@@ -43,6 +43,7 @@ class DocumentCache:
     def get_documents(self, nodes: Iterable[Node]) -> list[Document]:
         return [self.get_document(node) for node in nodes]
 
+
 class OldDocumentCache:
     documents: dict[str, Document] = {}
 

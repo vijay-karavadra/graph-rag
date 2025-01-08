@@ -13,15 +13,12 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, PrivateAttr
 
-
-from .traversal_adapters.mmr import MMRTraversalAdapter
 from .edge import Edge
 from .embedded_document import EmbeddedDocument
 from .mmr_helper import MmrHelper
-
+from .traversal_adapters.mmr import MMRTraversalAdapter
 
 BASIC_TYPES = (str, bool, int, float, complex, bytes)
-
 
 
 # this class uses pydantic, so store and edges
@@ -609,8 +606,3 @@ class GraphMMRTraversalRetriever(BaseRetriever):
             metadata_filter[edge.key] = edge.value
 
         return metadata_filter
-
-
-
-
-

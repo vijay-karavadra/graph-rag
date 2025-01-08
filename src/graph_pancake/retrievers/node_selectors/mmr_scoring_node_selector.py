@@ -1,13 +1,13 @@
 import dataclasses
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import Callable, Iterable
 
 import numpy as np
+from numpy.typing import NDArray
+
 from graph_pancake.utils.math import cosine_similarity
 
 from ..node import Node
 from .node_selector import NodeSelector
-
-from numpy.typing import NDArray
 
 NEG_INF = float("-inf")
 
