@@ -1,7 +1,10 @@
+"""Test of Graph Traversal Retriever"""
+
 import json
 import os
+import random
 from contextlib import contextmanager
-from typing import Any, Generator, Iterable
+from typing import Any, Generator, Iterable, List
 
 import pytest
 from langchain_chroma import Chroma
@@ -10,22 +13,15 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 from pytest import FixtureRequest
 
-
-from graph_pancake.retrievers.generic_graph_traversal_retriever import GenericGraphTraversalRetriever
-from graph_pancake.retrievers.node_selectors import MmrScoringNodeSelector
-
-from graph_pancake.retrievers.traversal_adapters.generic import (
-    AstraGraphTraversalAdapter,
-    CassandraGraphTraversalAdapter,
-    ChromaGraphTraversalAdapter,
-    GraphTraversalAdapter,
-    OpenSearchGraphTraversalAdapter,
+from graph_pancake.retrievers.graph_traversal_retriever import GraphTraversalRetriever
+from graph_pancake.retrievers.traversal_adapters.eager import (
+    AstraTraversalAdapter,
+    CassandraTraversalAdapter,
+    ChromaTraversalAdapter,
+    OpenSearchTraversalAdapter,
+    TraversalAdapter,
 )
-
 from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
-from fake_embeddings import (
-    AngularTwoDimensionalEmbeddings,
-)
 
 vector_store_types = [
     "astra-db",
@@ -35,8 +31,8 @@ vector_store_types = [
 ]
 
 
-def _doc_ids(docs: Iterable[Document]) -> set[str]:
-    return {doc.id for doc in docs if doc.id is not None}
+def _doc_ids(docs: Iterable[Document]) -> List[str]:
+    return [doc.id for doc in docs if doc.id is not None]
 
 
 class ParserEmbeddings(Embeddings):
@@ -58,6 +54,26 @@ class ParserEmbeddings(Embeddings):
         else:
             assert len(vals) == self.dimension
             return vals
+
+
+class EarthEmbeddings(Embeddings):
+    def get_vector_near(self, value: float) -> List[float]:
+        base_point = [value, (1 - value**2) ** 0.5]
+        fluctuation = random.random() / 100.0
+        return [base_point[0] + fluctuation, base_point[1] - fluctuation]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed_query(txt) for txt in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        words = set(text.lower().split())
+        if "earth" in words:
+            vector = self.get_vector_near(0.9)
+        elif {"planet", "world", "globe", "sphere"}.intersection(words):
+            vector = self.get_vector_near(0.8)
+        else:
+            vector = self.get_vector_near(0.1)
+        return vector
 
 
 @pytest.fixture
@@ -180,8 +196,8 @@ def vector_store(
     request: FixtureRequest, embedding_type: str, vector_store_type: str
 ) -> Generator[VectorStore, None, None]:
     embeddings: Embeddings
-    if embedding_type == "angular-embeddings":
-        embeddings = AngularTwoDimensionalEmbeddings()
+    if embedding_type == "earth-embeddings":
+        embeddings = EarthEmbeddings()
     elif embedding_type == "d2-embeddings":
         embeddings = ParserEmbeddings(dimension=2)
     else:
@@ -211,7 +227,7 @@ def vector_store(
 
         except (ImportError, ModuleNotFoundError):
             msg = (
-                "to test mmr-graph-traversal with AstraDB, please"
+                "to test graph-traversal with AstraDB, please"
                 " install langchain-astradb and python-dotenv"
             )
             raise ImportError(msg)
@@ -239,93 +255,77 @@ def vector_store(
             engine="faiss",
         )
         yield store
-        store.delete_index()  # store.index_name
+        if store.index_exists():
+            store.delete_index()  # store.index_name
     else:
         msg = f"Unknown vector store type: {vector_store_type}"
         raise ValueError(msg)
 
 
-def get_adapter(
-    vector_store: VectorStore, vector_store_type: str
-) -> GraphTraversalAdapter:
+def get_adapter(vector_store: VectorStore, vector_store_type: str) -> TraversalAdapter:
     if vector_store_type == "astra-db":
-        return AstraGraphTraversalAdapter(vector_store=vector_store)
+        return AstraTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "cassandra":
-        return CassandraGraphTraversalAdapter(vector_store=vector_store)
+        return CassandraTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "chroma-db":
-        return ChromaGraphTraversalAdapter(vector_store=vector_store)
+        return ChromaTraversalAdapter(vector_store=vector_store)
     elif vector_store_type == "open-search":
-        return OpenSearchGraphTraversalAdapter(vector_store=vector_store)
+        return OpenSearchTraversalAdapter(vector_store=vector_store)
     else:
         msg = f"Unknown vector store type: {vector_store_type}"
         raise ValueError(msg)
 
 
-@pytest.mark.parametrize("vector_store_type", vector_store_types)
-@pytest.mark.parametrize("embedding_type", ["angular-embeddings"])
-def test_mmr_traversal(vector_store: VectorStore, vector_store_type: str) -> None:
-    """ Test end to end construction and MMR search.
-    The embedding function used here ensures `texts` become
-    the following vectors on a circle (numbered v0 through v3):
+# this test has complex metadata fields (values with list type)
+# only `astra-db`` and `open-search` can correctly handle
+# complex metadata fields at this time.
+@pytest.mark.parametrize("vector_store_type", ["astra-db", "open-search"])
+@pytest.mark.parametrize("embedding_type", ["earth-embeddings"])
+def test_traversal(
+    vector_store: VectorStore,
+    vector_store_type: str,
+) -> None:
+    greetings = Document(
+        id="greetings",
+        page_content="Typical Greetings",
+        metadata={
+            "incoming": "parent",
+        },
+    )
 
-           ______ v2
-          /      \
-         /        \  v1
-    v3  |     .    | query
-         \        /  v0
-          \______/                 (N.B. very crude drawing)
+    doc1 = Document(
+        id="doc1",
+        page_content="Hello World",
+        metadata={"outgoing": "parent", "keywords": ["greeting", "world"]},
+    )
 
-    With fetch_k==2 and k==2, when query is at (1, ),
-    one expects that v2 and v0 are returned (in some order)
-    because v1 is "too close" to v0 (and v0 is closer than v1)).
-
-    Both v2 and v3 are reachable via edges from v0, so once it is
-    selected, those are both considered.
-    """
-    v0 = Document(id="v0", page_content="-0.124")
-    v1 = Document(id="v1", page_content="+0.127")
-    v2 = Document(id="v2", page_content="+0.25")
-    v3 = Document(id="v3", page_content="+1.0")
-
-    v0.metadata["outgoing"] = "link"
-    v2.metadata["incoming"] = "link"
-    v3.metadata["incoming"] = "link"
-
-    vector_store.add_documents([v0, v1, v2, v3])
+    doc2 = Document(
+        id="doc2",
+        page_content="Hello Earth",
+        metadata={"outgoing": "parent", "keywords": ["greeting", "earth"]},
+    )
+    vector_store.add_documents([greetings, doc1, doc2])
 
     vector_store_adapter = get_adapter(
         vector_store=vector_store,
         vector_store_type=vector_store_type,
     )
 
-    retriever = GenericGraphTraversalRetriever(
+    retriever = GraphTraversalRetriever(
         store=vector_store_adapter,
-        edges=[("outgoing", "incoming")],
-        node_selector_factory = MmrScoringNodeSelector.factory(),
-        fetch_k=2,
-        k=2,
+        edges=[("outgoing", "incoming"), "keywords"],
+        start_k=2,
         depth=2,
     )
 
-    docs = retriever.invoke("0.0", k=2, fetch_k=2)
-    assert _doc_ids(docs) == {"v0", "v2"}
+    docs = retriever.invoke("Earth", start_k=1, depth=0)
+    assert _doc_ids(docs) == ["doc2"]
 
-    # With max depth 0, no edges are traversed, so this doesn't reach v2 or v3.
-    # So it ends up picking "v1" even though it's similar to "v0".
-    docs = retriever.invoke("0.0", k=2, fetch_k=2, depth=0)
-    assert _doc_ids(docs) == {"v0", "v1"}
+    docs = retriever.invoke("Earth", depth=0)
+    assert _doc_ids(docs) == ["doc2", "doc1"]
 
-    # With max depth 0 but higher `fetch_k`, we encounter v2
-    docs = retriever.invoke("0.0", k=2, fetch_k=3, depth=0)
-    assert _doc_ids(docs) == {"v0", "v2"}
-
-    # v0 score is .46, v2 score is 0.16 so it won't be chosen.
-    docs = retriever.invoke("0.0", k=2, score_threshold=0.2)
-    assert _doc_ids(docs) == {"v0"}
-
-    # with k=4 we should get all of the documents.
-    docs = retriever.invoke("0.0", k=4)
-    assert _doc_ids(docs) == {"v0", "v2", "v1", "v3"}
+    docs = retriever.invoke("Earth", start_k=1, depth=1)
+    assert set(_doc_ids(docs)) == {"doc2", "doc1", "greetings"}
 
 
 def assert_document_format(doc: Document) -> None:
@@ -335,7 +335,12 @@ def assert_document_format(doc: Document) -> None:
     assert "__embedding" not in doc.metadata
 
 
-class TestMmrGraphTraversal:
+# the tests below use simple metadata fields
+# astra-db, cassandra, chroma-db, and open-search
+# can all handle simple metadata fields
+
+
+class TestGraphTraversal:
     @pytest.mark.parametrize("vector_store_type", vector_store_types)
     @pytest.mark.parametrize("embedding_type", ["d2-embeddings"])
     def test_invoke_sync(
@@ -344,7 +349,7 @@ class TestMmrGraphTraversal:
         vector_store_type: str,
         graph_vector_store_docs: list[Document],
     ) -> None:
-        """MMR Graph traversal search on a vector store."""
+        """Graph traversal search on a vector store."""
         vector_store.add_documents(graph_vector_store_docs)
 
         vector_store_adapter = get_adapter(
@@ -352,19 +357,23 @@ class TestMmrGraphTraversal:
             vector_store_type=vector_store_type,
         )
 
-        retriever = GenericGraphTraversalRetriever(
+        retriever = GraphTraversalRetriever(
             store=vector_store_adapter,
-            vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
             depth=2,
-            k=2,
+            start_k=2,
         )
 
+        docs = retriever.invoke(input="[2, 10]", depth=0)
+        ss_labels = {doc.metadata["label"] for doc in docs}
+        assert ss_labels == {"AR", "A0"}
+        assert_document_format(docs[0])
+
         docs = retriever.invoke(input="[2, 10]")
-        mt_labels = {doc.metadata["label"] for doc in docs}
-        assert mt_labels == {"AR", "BR"}
-        assert docs[0].metadata
+        # this is a set, as some of the internals of trav.search are set-driven
+        # so ordering is not deterministic:
+        ts_labels = {doc.metadata["label"] for doc in docs}
+        assert ts_labels == {"AR", "A0", "BR", "B0", "TR", "T0"}
         assert_document_format(docs[0])
 
     @pytest.mark.parametrize("vector_store_type", vector_store_types)
@@ -375,7 +384,7 @@ class TestMmrGraphTraversal:
         vector_store_type: str,
         graph_vector_store_docs: list[Document],
     ) -> None:
-        """MMR Graph traversal search on a vector store."""
+        """Graph traversal search on a graph store."""
         await vector_store.aadd_documents(graph_vector_store_docs)
 
         vector_store_adapter = get_adapter(
@@ -383,17 +392,18 @@ class TestMmrGraphTraversal:
             vector_store_type=vector_store_type,
         )
 
-        retriever = GenericGraphTraversalRetriever(
+        retriever = GraphTraversalRetriever(
             store=vector_store_adapter,
-            vector_store=vector_store,
             edges=[("out", "in"), "tag"],
-            node_selector_factory = MmrScoringNodeSelector.factory(),
             depth=2,
-            k=2,
+            start_k=2,
         )
-        mt_labels = set()
+        docs = await retriever.ainvoke(input="[2, 10]", depth=0)
+        ss_labels = {doc.metadata["label"] for doc in docs}
+        assert ss_labels == {"AR", "A0"}
+        assert_document_format(docs[0])
+
         docs = await retriever.ainvoke(input="[2, 10]")
-        mt_labels = {doc.metadata["label"] for doc in docs}
-        assert mt_labels == {"AR", "BR"}
-        assert docs[0].metadata
+        ss_labels = {doc.metadata["label"] for doc in docs}
+        assert ss_labels == {"AR", "A0", "BR", "B0", "TR", "T0"}
         assert_document_format(docs[0])

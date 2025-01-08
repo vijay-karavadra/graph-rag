@@ -271,6 +271,20 @@ wheels = [
 ]
 
 [[package]]
+name = "cassio"
+version = "0.1.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cassandra-driver" },
+    { name = "numpy" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/00/a9a3a958169677f5f713bb3ed5a4afc1baf7abd1e08f37acad718aa923db/cassio-0.1.10.tar.gz", hash = "sha256:577f0a2ce5898a57c83195bf74811dec8794282477eb6fa4debd4ccec6cfab98", size = 35854 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/ae/25347dca6ca4032d421cd674fdb35bb02985baf5dcb8cbfac0cc95dfae49/cassio-0.1.10-py3-none-any.whl", hash = "sha256:9eebe5f18b627d0f328de4dbbf22c68cc76dbeecf46d846c0277e410de5cb1dc", size = 45726 },
+]
+
+[[package]]
 name = "certifi"
 version = "2024.12.14"
 source = { registry = "https://pypi.org/simple" }
@@ -673,31 +687,39 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
+    { name = "numpy" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "cassandra-driver" },
+    { name = "cassio" },
     { name = "langchain-astradb" },
     { name = "langchain-chroma" },
     { name = "langchain-community" },
     { name = "langchain-openai" },
     { name = "langchain-opensearch" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "langchain-core", specifier = ">=0.3.29" }]
+requires-dist = [
+    { name = "langchain-core", specifier = ">=0.3.29" },
+    { name = "numpy", specifier = ">=1.26.4" },
+]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "cassandra-driver", specifier = ">=3.29.2" },
+    { name = "cassio", specifier = ">=0.1.10" },
     { name = "langchain-astradb", specifier = ">=0.5.2" },
-    { name = "langchain-chroma", specifier = ">=0.1.4" },
+    { name = "langchain-chroma", git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fpartners%2Fchroma" },
     { name = "langchain-community", specifier = ">=0.3.14" },
     { name = "langchain-openai", specifier = ">=0.2.14" },
     { name = "langchain-opensearch", specifier = ">=0.0.2" },
     { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pytest-asyncio", specifier = ">=0.25.2" },
 ]
 
 [[package]]
@@ -1122,17 +1144,13 @@ wheels = [
 
 [[package]]
 name = "langchain-chroma"
-version = "0.1.4"
-source = { registry = "https://pypi.org/simple" }
+version = "0.2.0"
+source = { git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fpartners%2Fchroma#2b09f798e1de1717c6389e5d9f5c34c7c3248be6" }
 dependencies = [
     { name = "chromadb" },
     { name = "fastapi" },
     { name = "langchain-core" },
     { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/0d/b55c34db346e531d72e629891606512a792c83c8c82b40e6e313db3e36b9/langchain_chroma-0.1.4.tar.gz", hash = "sha256:5963a79bf72af0f72019084bbc1e610d03ba33ec2df9a4b47b27c0132aa533fb", size = 10157 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/8c/ef0a589e523e72373a79a64cd1184682155113b865f889d815a9f264a755/langchain_chroma-0.1.4-py3-none-any.whl", hash = "sha256:2877b284fc736bfd31628aa542ed0f5410c3cdc63ad2c670cb67fc360b4a236a", size = 10452 },
 ]
 
 [[package]]
@@ -2092,6 +2110,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/35/30e0d83068951d90a01852cb1cef56e5d8a09d20c7f511634cc2f7e0372a/pytest-8.3.4.tar.gz", hash = "sha256:965370d062bce11e73868e0335abac31b4d3de0e82f4007408d242b4f8610761", size = 1445919 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/11/92/76a1c94d3afee238333bc0a42b82935dd8f9cf8ce9e336ff87ee14d9e1cf/pytest-8.3.4-py3-none-any.whl", hash = "sha256:50e16d954148559c9a74109af1eaf0c945ba2d8f30f0a3d3335edde19788b6f6", size = 343083 },
+]
+
+[[package]]
+name = "pytest-asyncio"
+version = "0.25.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/df/adcc0d60f1053d74717d21d58c0048479e9cab51464ce0d2965b086bd0e2/pytest_asyncio-0.25.2.tar.gz", hash = "sha256:3f8ef9a98f45948ea91a0ed3dc4268b5326c0e7bce73892acc654df4262ad45f", size = 53950 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/d8/defa05ae50dcd6019a95527200d3b3980043df5aa445d40cb0ef9f7f98ab/pytest_asyncio-0.25.2-py3-none-any.whl", hash = "sha256:0d0bb693f7b99da304a0634afc0a4b19e49d5e0de2d670f38dc4bfa5727c5075", size = 19400 },
 ]
 
 [[package]]

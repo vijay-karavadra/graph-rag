@@ -1,25 +1,23 @@
+
 from typing import (
-    TYPE_CHECKING,
     Any,
     Dict,
     List,
     Optional,
     Sequence,
     Tuple,
+
     cast,
 )
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
-if TYPE_CHECKING:
-    pass
-
-from ..document_cache import METADATA_EMBEDDING_KEY
-from .graph_traversal_adapter import GraphTraversalAdapter
+from .mmr_traversal_adapter import MMRTraversalAdapter
+from graph_pancake.retrievers.document_cache import METADATA_EMBEDDING_KEY
 
 
-class AstraGraphTraversalAdapter(GraphTraversalAdapter):
+class AstraMMRTraversalAdapter(MMRTraversalAdapter):
     def __init__(self, vector_store: VectorStore):
         try:
             from langchain_astradb import AstraDBVectorStore

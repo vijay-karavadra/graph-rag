@@ -2,7 +2,6 @@ import asyncio
 import warnings
 from typing import (
     Any,
-    Callable,
     Iterable,
     List,
     Sequence,
@@ -14,23 +13,23 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, PrivateAttr
 
-from .document_cache import DocumentCache
+
+from .traversal_adapters.mmr import MMRTraversalAdapter
 from .edge import Edge
-from .node import Node
-from .node_selectors.node_selector import NodeSelector
-from .traversal_adapters.generic.graph_traversal_adapter import GraphTraversalAdapter
+from .embedded_document import EmbeddedDocument
+from .mmr_helper import MmrHelper
 
 
 BASIC_TYPES = (str, bool, int, float, complex, bytes)
 
+
+
 # this class uses pydantic, so store and edges
 # must be provided at init time.
-class GenericGraphTraversalRetriever(BaseRetriever):
-    store: GraphTraversalAdapter
+class GraphMMRTraversalRetriever(BaseRetriever):
+    store: MMRTraversalAdapter
     edges: List[Union[str, Tuple[str, str]]]
     _edges: List[Tuple[str, str]] = PrivateAttr(default=[])
-    node_selector_factory: Callable[[int, list[float]], NodeSelector]
-
     k: int = Field(default=4)
     depth: int = Field(default=2)
     fetch_k: int = Field(default=100)
@@ -51,7 +50,7 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 and len(edge) == 2
                 and all(isinstance(item, str) for item in edge)
             ):
-                self._edges.append((edge[0], edge[1]))
+                self._edges.append(edge)
             else:
                 raise ValueError(
                     "Invalid type for edge. must be 'str' or 'tuple[str,str]'"
@@ -72,12 +71,15 @@ class GenericGraphTraversalRetriever(BaseRetriever):
         **kwargs: Any,
     ) -> list[Document]:
         """Retrieve document nodes from this graph vector store using MMR-traversal.
+
         This strategy first retrieves the top `fetch_k` results by similarity to
         the question. It then selects the top `k` results based on
         maximum-marginal relevance using the given `lambda_mult`.
+
         At each step, it considers the (remaining) documents from `fetch_k` as
         well as any documents connected by edges to a selected document
         retrieved based on similarity (a "root").
+
         Args:
             query: The query string to search for.
             initial_roots: Optional list of document IDs to use for initializing search.
@@ -109,10 +111,15 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             self.score_threshold if score_threshold is None else score_threshold
         )
 
+        # For each unselected node, stores the outgoing edges.
+        outgoing_edges_map: dict[str, set[Edge]] = {}
         visited_edges: set[Edge] = set()
 
-        def fetch_initial_candidates() -> tuple[list[float], dict[str, Node]]:
+        def fetch_initial_candidates() -> (
+            tuple[list[float], dict[str, EmbeddedDocument]]
+        ):
             """Gets the embedded query and the set of initial candidates.
+
             If fetch_k is zero, there will be no initial candidates.
             """
             query_embedding, initial_nodes = self._get_initial(
@@ -121,17 +128,28 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 filter=filter,
                 **kwargs,
             )
-            return query_embedding, initial_nodes
+            return query_embedding, self._get_candidate_embeddings(
+                nodes=initial_nodes, outgoing_edges_map=outgoing_edges_map
+            )
 
         def fetch_neighborhood_candidates(
             neighborhood: Sequence[str],
-        ) -> dict[str, Node]:
-            nonlocal visited_edges
+        ) -> dict[str, EmbeddedDocument]:
+            nonlocal outgoing_edges_map, visited_edges
+
+            # Put the neighborhood into the outgoing edges, to avoid adding it
+            # to the candidate set in the future.
+            outgoing_edges_map.update(
+                {content_id: set() for content_id in neighborhood}
+            )
 
             # Initialize the visited_edges with the set of outgoing edges from the
             # neighborhood. This prevents re-visiting them.
+            visited_edges = set()
             for doc in self.store.get(neighborhood):
-                visited_edges.update(self._get_outgoing_edges(doc.metadata))
+                visited_edges.update(
+                    self._get_outgoing_edges(doc=EmbeddedDocument(doc=doc))
+                )
 
             # Fetch the candidates.
             adjacent_nodes = self._get_adjacent(
@@ -142,76 +160,82 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 **kwargs,
             )
 
-            return adjacent_nodes
+            return self._get_candidate_embeddings(
+                nodes=adjacent_nodes, outgoing_edges_map=outgoing_edges_map
+            )
 
-        # Tracks the depth of each candidate.
-        depths = {}
-
-        # Retrieve initial candidates.
         query_embedding, initial_candidates = fetch_initial_candidates()
-        node_selector = self.node_selector_factory(k, query_embedding)
-        for node_id in initial_candidates.keys():
-            depths[node_id] = 0
-        node_selector.add_nodes(initial_candidates)
+        helper = MmrHelper(
+            k=k,
+            query_embedding=query_embedding,
+            lambda_mult=lambda_mult,
+            score_threshold=score_threshold,
+        )
+        helper.add_candidates(candidates=initial_candidates, depth_found=0)
 
         if initial_roots:
             neighborhood_candidates = fetch_neighborhood_candidates(initial_roots)
-            for node_id in initial_roots.keys():
-                depths[node_id] = 0
-            node_selector.add_nodes(neighborhood_candidates)
+            helper.add_candidates(candidates=neighborhood_candidates, depth_found=0)
 
-        cache = DocumentCache()
-        selected_nodes: list[Node] = []
-        while len(selected_nodes) < k:
-            selected_nodes_iter = node_selector.select_nodes(k - len(selected_nodes))
-            if len(selected_nodes_iter) == 0:
+        # Tracks the depth of each candidate.
+        depths = {candidate_id: 0 for candidate_id in helper.candidate_ids()}
+
+        # Select the best item, K times.
+        selected_docs: list[Document] = []
+        for _ in range(k):
+            selected_doc = helper.pop_best()
+            if selected_doc is None or selected_doc.id is None:
                 break
 
-            selected_nodes.extend(selected_nodes_iter)
+            selected_docs.append(selected_doc)
 
-            selected_outgoing_edges = {}
-            for selected_node in selected_nodes:
-                next_depth = depths[selected_node.id] + 1
-                if next_depth < depth:
-                    # If the next nodes would not exceed the depth limit, find
-                    # the adjacent nodes.
+            next_depth = depths[selected_doc.id] + 1
+            if next_depth < depth:
+                # If the next document nodes would not exceed the depth limit, find the
+                # adjacent document nodes.
 
-                    # Find the edges from the selected node.
-                    outgoing_edges = self._get_outgoing_edges(selected_node.metadata)
-                    selected_outgoing_edges.update(outgoing_edges)
+                # Find the edges edged to from the selected id.
+                selected_outgoing_edges = outgoing_edges_map.pop(selected_doc.id)
 
-            # Don't re-visit already visited edges.
-            selected_outgoing_edges.difference_update(visited_edges)
+                # Don't re-visit already visited edges.
+                selected_outgoing_edges.difference_update(visited_edges)
 
-            # Find the document nodes with incoming edges from those edges.
-            adjacent_nodes = self._get_adjacent(
-                outgoing_edges=selected_outgoing_edges,
-                query_embedding=query_embedding,
-                k_per_edge=adjacent_k,
-                filter=filter,
-                **kwargs,
-            )
+                # Find the document nodes with incoming edges from those edges.
+                adjacent_nodes = self._get_adjacent(
+                    edges=selected_outgoing_edges,
+                    query_embedding=query_embedding,
+                    k_per_edge=adjacent_k,
+                    filter=filter,
+                    **kwargs,
+                )
 
-            # Record the selected_outgoing_edges as visited.
-            visited_edges.update(selected_outgoing_edges)
+                # Record the selected_outgoing_edges as visited.
+                visited_edges.update(selected_outgoing_edges)
 
-            for adjacent_node in adjacent_nodes:
-                if next_depth < depths.get(adjacent_node.id, depth + 1):
-                    # If this is a new shortest depth, or there was no
-                    # previous depth, update the depths. This ensures that
-                    # when we discover a node we will have the shortest
-                    # depth available.
-                    #
-                    # NOTE: No effort is made to traverse from nodes that
-                    # were previously selected if they become reachable via
-                    # a shorter path via nodes selected later. This is
-                    # currently "intended", but may be worth experimenting
-                    # with.
-                    depths[adjacent_node.id] = next_depth
+                for adjacent_node in adjacent_nodes:
+                    if (
+                        adjacent_node.id is not None
+                        and adjacent_node.id not in outgoing_edges_map
+                    ):
+                        if next_depth < depths.get(adjacent_node.id, depth + 1):
+                            # If this is a new shortest depth, or there was no
+                            # previous depth, update the depths. This ensures that
+                            # when we discover a node we will have the shortest
+                            # depth available.
+                            #
+                            # NOTE: No effort is made to traverse from nodes that
+                            # were previously selected if they become reachable via
+                            # a shorter path via nodes selected later. This is
+                            # currently "intended", but may be worth experimenting
+                            # with.
+                            depths[adjacent_node.id] = next_depth
 
-            node_selector.add_nodes(adjacent_nodes)
+                new_candidates = self._get_candidate_embeddings(
+                    nodes=adjacent_nodes, outgoing_edges_map=outgoing_edges_map
+                )
+                helper.add_candidates(new_candidates, depth_found=next_depth)
 
-        return cache.get_documents(selected_nodes)
+        return selected_docs
 
     async def _aget_relevant_documents(
         self,
@@ -228,6 +252,7 @@ class GenericGraphTraversalRetriever(BaseRetriever):
         **kwargs: Any,
     ) -> list[Document]:
         """Asynchronously get documents relevant to a query.
+
         Args:
             query: String to find relevant documents for.
             run_manager: The callback handler to use.
@@ -239,12 +264,15 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             List of relevant documents
         """
         """Retrieve documents from this graph store using MMR-traversal.
+
         This strategy first retrieves the top `fetch_k` results by similarity to
         the question. It then selects the top `k` results based on
         maximum-marginal relevance using the given `lambda_mult`.
+
         At each step, it considers the (remaining) documents from `fetch_k` as
         well as any documents connected by edges to a selected document
         retrieved based on similarity (a "root").
+
         Args:
             query: The query string to search for.
             initial_roots: Optional list of document IDs to use for initializing search.
@@ -276,10 +304,15 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             self.score_threshold if score_threshold is None else score_threshold
         )
 
+        # For each unselected node, stores the outgoing edges.
+        outgoing_edges_map: dict[str, set[Edge]] = {}
         visited_edges: set[Edge] = set()
 
-        async def fetch_initial_candidates() -> tuple[list[float], dict[str, Node]]:
+        async def fetch_initial_candidates() -> (
+            tuple[list[float], dict[str, EmbeddedDocument]]
+        ):
             """Gets the embedded query and the set of initial candidates.
+
             If fetch_k is zero, there will be no initial candidates.
             """
 
@@ -290,28 +323,41 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 **kwargs,
             )
 
-            return query_embedding, initial_nodes
+            return query_embedding, self._get_candidate_embeddings(
+                nodes=initial_nodes, outgoing_edges_map=outgoing_edges_map
+            )
 
         async def fetch_neighborhood_candidates(
             neighborhood: Sequence[str],
-        ) -> dict[str, Node]:
-            nonlocal visited_edges
+        ) -> dict[str, EmbeddedDocument]:
+            nonlocal outgoing_edges_map, visited_edges
+
+            # Put the neighborhood into the outgoing edges, to avoid adding it
+            # to the candidate set in the future.
+            outgoing_edges_map.update(
+                {content_id: set() for content_id in neighborhood}
+            )
 
             # Initialize the visited_edges with the set of outgoing edges from the
             # neighborhood. This prevents re-visiting them.
+            visited_edges = set()
             for doc in await self.store.aget(neighborhood):
-                visited_edges.update(self._get_outgoing_edges(doc.metadata))
+                visited_edges.update(
+                    self._get_outgoing_edges(doc=EmbeddedDocument(doc=doc))
+                )
 
             # Fetch the candidates.
             adjacent_nodes = await self._aget_adjacent(
-                outgoing_edges=visited_edges,
+                edges=visited_edges,
                 query_embedding=query_embedding,
                 k_per_edge=adjacent_k,
                 filter=filter,
                 **kwargs,
             )
 
-            return adjacent_nodes
+            return self._get_candidate_embeddings(
+                nodes=adjacent_nodes, outgoing_edges_map=outgoing_edges_map
+            )
 
         query_embedding, initial_candidates = await fetch_initial_candidates()
         helper = MmrHelper(
@@ -320,11 +366,11 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             lambda_mult=lambda_mult,
             score_threshold=score_threshold,
         )
-        helper.add_candidates(candidates=initial_candidates)
+        helper.add_candidates(candidates=initial_candidates, depth_found=0)
 
         if initial_roots:
             neighborhood_candidates = await fetch_neighborhood_candidates(initial_roots)
-            helper.add_candidates(candidates=neighborhood_candidates)
+            helper.add_candidates(candidates=neighborhood_candidates, depth_found=0)
 
         # Tracks the depth of each candidate.
         depths = {candidate_id: 0 for candidate_id in helper.candidate_ids()}
@@ -345,16 +391,14 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 # adjacent document nodes.
 
                 # Find the edges edgeed to from the selected id.
-                selected_outgoing_edges = self._get_outgoing_edges(
-                    selected_doc.metadata
-                )
+                selected_outgoing_edges = outgoing_edges_map.pop(selected_doc.id)
 
                 # Don't re-visit already visited edges.
                 selected_outgoing_edges.difference_update(visited_edges)
 
                 # Find the document nodes with incoming edges from those edges.
                 adjacent_nodes = await self._aget_adjacent(
-                    outgoing_edges=selected_outgoing_edges,
+                    edges=selected_outgoing_edges,
                     query_embedding=query_embedding,
                     k_per_edge=adjacent_k,
                     filter=filter,
@@ -365,47 +409,69 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 visited_edges.update(selected_outgoing_edges)
 
                 for adjacent_node in adjacent_nodes:
-                    if next_depth < depths.get(adjacent_node.id, depth + 1):
-                        # If this is a new shortest depth, or there was no
-                        # previous depth, update the depths. This ensures that
-                        # when we discover a node we will have the shortest
-                        # depth available.
-                        #
-                        # NOTE: No effort is made to traverse from nodes that
-                        # were previously selected if they become reachable via
-                        # a shorter path via nodes selected later. This is
-                        # currently "intended", but may be worth experimenting
-                        # with.
-                        depths[adjacent_node.id] = next_depth
+                    if (
+                        adjacent_node.id is not None
+                        and adjacent_node.id not in outgoing_edges_map
+                    ):
+                        if next_depth < depths.get(adjacent_node.id, depth + 1):
+                            # If this is a new shortest depth, or there was no
+                            # previous depth, update the depths. This ensures that
+                            # when we discover a node we will have the shortest
+                            # depth available.
+                            #
+                            # NOTE: No effort is made to traverse from nodes that
+                            # were previously selected if they become reachable via
+                            # a shorter path via nodes selected later. This is
+                            # currently "intended", but may be worth experimenting
+                            # with.
+                            depths[adjacent_node.id] = next_depth
 
-                helper.add_candidates(adjacent_nodes)
+                new_candidates = self._get_candidate_embeddings(
+                    nodes=adjacent_nodes, outgoing_edges_map=outgoing_edges_map
+                )
+                helper.add_candidates(new_candidates, depth_found=next_depth)
 
         return selected_docs
+
+    def _get_candidate_embeddings(
+        self,
+        nodes: Iterable[EmbeddedDocument],
+        outgoing_edges_map: dict[str, set[Edge]],
+    ) -> dict[str, EmbeddedDocument]:
+        """Returns a map of doc.id to doc embedding.
+
+        Only returns document nodes not yet in the outgoing_edges_map.
+        Updates the outgoing_edges_map with the new document node edges.
+        """
+        candidates: dict[str, EmbeddedDocument] = {}
+        for node in nodes:
+            if node.id not in outgoing_edges_map:
+                outgoing_edges_map[node.id] = self._get_outgoing_edges(doc=node)
+                candidates[node.id] = node
+        return candidates
 
     def _get_initial(
         self,
         query: str,
         fetch_k: int,
-        cache: DocumentCache,
         filter: dict[str, Any] | None = None,  # noqa: A002
         **kwargs: Any,
-    ) -> tuple[list[float], dict[str, Node]]:
+    ) -> tuple[list[float], list[EmbeddedDocument]]:
         query_embedding, docs = self.store.similarity_search_with_embedding(
             query=query,
             k=fetch_k,
             filter=filter,
             **kwargs,
         )
-        return query_embedding, cache.add_documents(docs, depth=0)
+        return query_embedding, [EmbeddedDocument(doc=doc) for doc in docs]
 
     async def _aget_initial(
         self,
         query: str,
         fetch_k: int,
-        cache: DocumentCache,
         filter: dict[str, Any] | None = None,  # noqa: A002
         **kwargs: Any,
-    ) -> tuple[list[float], dict[str, Node]]:
+    ) -> tuple[list[float], list[EmbeddedDocument]]:
         (
             query_embedding,
             docs,
@@ -415,79 +481,77 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             filter=filter,
             **kwargs,
         )
-        return query_embedding, cache.add_documents(docs)
+        return query_embedding, [EmbeddedDocument(doc=doc) for doc in docs]
 
     def _get_adjacent(
         self,
-        cache: DocumentCache,
-        outgoing_edges: set[Edge],
+        edges: set[Edge],
         query_embedding: list[float],
         k_per_edge: int | None = None,
         filter: dict[str, Any] | None = None,  # noqa: A002
         **kwargs: Any,
-    ) -> dict[str, Node]:
+    ) -> set[EmbeddedDocument]:
         """Return the target docs with incoming edges from any of the given edges.
+
         Args:
             edges: The edges to look for.
             query_embedding: The query embedding. Used to rank target docs.
             doc_cache: A cache of retrieved docs. This will be added to.
             k_per_edge: The number of target docs to fetch for each edge.
             filter: Optional metadata to filter the results.
+
         Returns:
-            Dictionary of adjacent nodes, keyed by node ID.
+            Iterable of adjacent edges.
         """
-        results: dict[str, Node] = set()
-        for outgoing_edge in outgoing_edges:
+        results: set[EmbeddedDocument] = set()
+        for edge in edges:
             docs = self.store.similarity_search_with_embedding_by_vector(
                 embedding=query_embedding,
                 k=k_per_edge or 10,
-                filter=self._get_metadata_filter(
-                    metadata=filter, outgoing_edge=outgoing_edge
-                ),
+                filter=self._get_metadata_filter(metadata=filter, edge=edge),
                 **kwargs,
             )
-            results.update(cache.add_documents(docs))
+            results.update({EmbeddedDocument(doc=doc) for doc in docs})
         return results
 
     async def _aget_adjacent(
         self,
-        outgoing_edges: set[Edge],
-        cache: DocumentCache,
+        edges: set[Edge],
         query_embedding: list[float],
         k_per_edge: int | None = None,
         filter: dict[str, Any] | None = None,  # noqa: A002
         **kwargs: Any,
-    ) -> dict[str, Node]:
+    ) -> set[EmbeddedDocument]:
         """Returns document nodes with incoming edges from any of the given edges.
+
         Args:
             edges: The edges to look for.
             query_embedding: The query embedding. Used to rank target nodes.
             doc_cache: A cache of retrieved docs. This will be added to.
             k_per_edge: The number of target nodes to fetch for each edge.
             filter: Optional metadata to filter the results.
+
         Returns:
-            Dictionary of adjacent nodes, keyed by node ID.
+            Iterable of adjacent edges.
         """
 
         tasks = [
             self.store.asimilarity_search_with_embedding_by_vector(
                 embedding=query_embedding,
                 k=k_per_edge or 10,
-                filter=self._get_metadata_filter(
-                    metadata=filter, outgoing_edge=outgoing_edge
-                ),
+                filter=self._get_metadata_filter(metadata=filter, edge=edge),
                 **kwargs,
             )
-            for outgoing_edge in outgoing_edges
+            for edge in edges
         ]
 
-        results: dict[str, Node] = {}
+        results: set[EmbeddedDocument] = set()
         for completed_task in asyncio.as_completed(tasks):
             docs = await completed_task
-            results.update(cache.add_documents(docs))
+            results.update({EmbeddedDocument(doc=doc) for doc in docs})
         return results
 
-    def _get_outgoing_edges(self, doc: Document) -> set[Edge]:
+    def _get_outgoing_edges(self, doc: EmbeddedDocument) -> set[Edge]:
         edges = set()
         for source_key, target_key in self._edges:
             if source_key in doc.metadata:
@@ -499,8 +563,8 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 ):
                     if self.use_denormalized_metadata:
                         warnings.warn(
-                            "Iterable metadata values are supported as"
-                            " edges in denormalized metadata"
+                            "Iterable metadata values are supported as "
+                            "edges in denormalized metadata"
                         )
                     else:
                         for item in value:
@@ -545,3 +609,8 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             metadata_filter[edge.key] = edge.value
 
         return metadata_filter
+
+
+
+
+

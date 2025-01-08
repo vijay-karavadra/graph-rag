@@ -18,7 +18,7 @@ from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from graph_pancake.retrievers.generic_graph_traversal_retriever import GenericGraphTraversalRetriever
 from graph_pancake.retrievers.node_selectors import EagerNodeSelector
 
-from graph_pancake.retrievers.traversal_adapters import (
+from graph_pancake.retrievers.traversal_adapters.generic import (
     AstraGraphTraversalAdapter,
     CassandraGraphTraversalAdapter,
     ChromaGraphTraversalAdapter,
