@@ -1,19 +1,18 @@
 # Variables
-UVX = uvx
-RUFF = $(UVX) ruff@0.8.6
+RUFF = ruff@0.8.6
 
 
 .PHONY: check
 check:
-	$(RUFF) check .
+	uvx $(RUFF) check .
 
 .PHONY: fix
 fix:
-	$(RUFF) check . --fix
+	uvx $(RUFF) check . --fix
 
 .PHONY: fmt
 fmt:
-	$(RUFF) format .
+	uvx $(RUFF) format .
 
 .PHONY: docker-up
 docker-up:
@@ -31,3 +30,9 @@ integration:
 .PHONY: unit
 unit:
 	uv run pytest ./tests/unit_tests/
+
+.PHONY: mypy
+mypy:
+	uv run mypy .
+
+lint: fmt fix mypy
