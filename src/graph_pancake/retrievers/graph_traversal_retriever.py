@@ -26,7 +26,7 @@ class GraphTraversalRetriever(BaseRetriever):
     edges: List[Union[str, Tuple[str, str]]]
     _edges: List[Tuple[str, str]] = PrivateAttr(default=[])
     start_k: int = Field(default=4)
-    depth: int = Field(default=4)
+    depth: int = Field(default=2)
     use_denormalized_metadata: bool = Field(default=False)
     denormalized_path_delimiter: str = Field(default=".")
     denormalized_static_value: Any = Field(default=True)

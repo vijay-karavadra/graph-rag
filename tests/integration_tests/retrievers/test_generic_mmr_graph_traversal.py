@@ -1,12 +1,8 @@
-import json
 import os
 from contextlib import contextmanager
 from typing import Any, Generator, Iterable
 
 import pytest
-from fake_embeddings import (
-    AngularTwoDimensionalEmbeddings,
-)
 from langchain_chroma import Chroma
 from langchain_community.vectorstores import Cassandra, OpenSearchVectorSearch
 from langchain_core.documents import Document
@@ -25,6 +21,10 @@ from graph_pancake.retrievers.traversal_adapters.generic import (
     GraphTraversalAdapter,
     OpenSearchGraphTraversalAdapter,
 )
+from tests.embeddings import (
+    AngularTwoDimensionalEmbeddings,
+    ParserEmbeddings,
+)
 
 vector_store_types = [
     "astra-db",
@@ -36,27 +36,6 @@ vector_store_types = [
 
 def _doc_ids(docs: Iterable[Document]) -> set[str]:
     return {doc.id for doc in docs if doc.id is not None}
-
-
-class ParserEmbeddings(Embeddings):
-    """Parse input texts: if they are json for a List[float], fine.
-    Otherwise, return all zeros and call it a day.
-    """
-
-    def __init__(self, dimension: int) -> None:
-        self.dimension = dimension
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        try:
-            vals = json.loads(text)
-        except json.JSONDecodeError:
-            return [0.0] * self.dimension
-        else:
-            assert len(vals) == self.dimension
-            return vals
 
 
 @pytest.fixture

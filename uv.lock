@@ -733,6 +733,7 @@ dev = [
     { name = "langchain-opensearch" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "sentence-transformers" },
 ]
 
 [package.metadata]
@@ -755,6 +756,7 @@ dev = [
     { name = "langchain-opensearch", specifier = ">=0.0.2" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-asyncio", specifier = ">=0.25.2" },
+    { name = "sentence-transformers", specifier = ">=3.3.1" },
 ]
 
 [[package]]

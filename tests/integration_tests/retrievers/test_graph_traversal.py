@@ -1,8 +1,6 @@
 """Test of Graph Traversal Retriever"""
 
-import json
 import os
-import random
 from contextlib import contextmanager
 from typing import Any, Generator, Iterable, List
 
@@ -22,6 +20,7 @@ from graph_pancake.retrievers.traversal_adapters.eager import (
     OpenSearchTraversalAdapter,
     TraversalAdapter,
 )
+from tests.embeddings import EarthEmbeddings, ParserEmbeddings
 
 vector_store_types = [
     "astra-db",
@@ -33,47 +32,6 @@ vector_store_types = [
 
 def _doc_ids(docs: Iterable[Document]) -> List[str]:
     return [doc.id for doc in docs if doc.id is not None]
-
-
-class ParserEmbeddings(Embeddings):
-    """Parse input texts: if they are json for a List[float], fine.
-    Otherwise, return all zeros and call it a day.
-    """
-
-    def __init__(self, dimension: int) -> None:
-        self.dimension = dimension
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        try:
-            vals = json.loads(text)
-        except json.JSONDecodeError:
-            return [0.0] * self.dimension
-        else:
-            assert len(vals) == self.dimension
-            return vals
-
-
-class EarthEmbeddings(Embeddings):
-    def get_vector_near(self, value: float) -> List[float]:
-        base_point = [value, (1 - value**2) ** 0.5]
-        fluctuation = random.random() / 100.0
-        return [base_point[0] + fluctuation, base_point[1] - fluctuation]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        words = set(text.lower().split())
-        if "earth" in words:
-            vector = self.get_vector_near(0.9)
-        elif {"planet", "world", "globe", "sphere"}.intersection(words):
-            vector = self.get_vector_near(0.8)
-        else:
-            vector = self.get_vector_near(0.1)
-        return vector
 
 
 @pytest.fixture
