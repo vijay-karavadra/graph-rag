@@ -24,6 +24,9 @@ There is a Makefile with some standard commands:
 * `make fmt` Uses Ruff to format all code
 * `make check` Uses Ruff to check all code
 * `make fix` Uses Ruff to check and attempt to fix all code
+* `make mypy` Runs the Mypy static type check.
+
+`make lint`: Does `fmt`, `fix`, and `mypy` in a single command
 
 ### Testing
 
