@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Callable, Iterable
+from typing import Any, Iterable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 from graph_pancake.utils.math import cosine_similarity
 
 from ..node import Node
-from .node_selector import NodeSelector
 
 NEG_INF = float("-inf")
 
@@ -21,8 +20,7 @@ def _emb_to_ndarray(embedding: list[float]) -> NDArray[np.float32]:
 
 @dataclasses.dataclass
 class _MmrCandidate:
-    id: str
-    embedding: list[float]
+    node: Node
     similarity: float
     weighted_similarity: float
     weighted_redundancy: float
@@ -83,24 +81,14 @@ class MmrScoringNodeSelector:
     best_score: float
     best_id: str | None
 
-    @staticmethod
-    def factory(
-        *, lambda_mult: float = 0.5, score_threshold: float = NEG_INF
-    ) -> Callable[[list[float]], NodeSelector]:
-        return lambda k, query_embedding: MmrScoringNodeSelector(
-            k,
-            query_embedding,
-            lambda_mult=lambda_mult,
-            score_threshold=score_threshold,
-        )
-
     def __init__(
         self,
+        *,
         k: int,
         query_embedding: list[float],
-        *,
         lambda_mult: float = 0.5,
         score_threshold: float = NEG_INF,
+        **kwargs: dict[str, Any],
     ) -> None:
         """Create a new Traversal MMR helper."""
         self.query_embedding = _emb_to_ndarray(query_embedding)
@@ -144,7 +132,7 @@ class MmrScoringNodeSelector:
         # Get the embedding for the id.
         index = self.candidate_id_to_index.pop(candidate_id)
         candidate = self.candidates[index]
-        if candidate.id != candidate_id:
+        if candidate.node.id != candidate_id:
             msg = (
                 "ID in self.candidate_id_to_index doesn't match the ID of the "
                 "corresponding index in self.candidates"
@@ -163,7 +151,7 @@ class MmrScoringNodeSelector:
 
             old_last = self.candidates.pop()
             self.candidates[index] = old_last
-            self.candidate_id_to_index[old_last.id] = index
+            self.candidate_id_to_index[old_last.node.id] = index
 
         self.candidate_embeddings = np.vsplit(self.candidate_embeddings, [last_index])[
             0
@@ -192,14 +180,11 @@ class MmrScoringNodeSelector:
         self.selected_embeddings[selection_index] = selected_embedding
 
         # Create the selected result node.
-        selected_node = Node(
-            id=selected_id,
-            embedding=selected.embedding,
-            extra_metadata={
-                "_similarity_score": selected.similarity,
-                "_mmr_score": self.best_socre,
-            },
-        )
+        selected_node = selected.node
+        selected_node.extra_metadata = {
+            "_similarity_score": selected.similarity,
+            "_mmr_score": self.best_score,
+        }
 
         # Reset the best score / best ID.
         self.best_score = NEG_INF
@@ -214,7 +199,7 @@ class MmrScoringNodeSelector:
                 candidate.update_redundancy(similarity[index][0])
                 if candidate.score > self.best_score:
                     self.best_score = candidate.score
-                    self.best_id = candidate.id
+                    self.best_id = candidate.node.id
 
         return [selected_node]
 
@@ -255,7 +240,7 @@ class MmrScoringNodeSelector:
             if redundancy.shape[0] > 0:
                 max_redundancy = redundancy[index].max()
             candidate = _MmrCandidate(
-                id=candidate_id,
+                node=nodes[candidate_id],
                 similarity=similarity[index][0],
                 weighted_similarity=self.lambda_mult * similarity[index][0],
                 weighted_redundancy=self.lambda_mult_complement * max_redundancy,
@@ -264,7 +249,7 @@ class MmrScoringNodeSelector:
 
             if candidate.score >= self.best_score:
                 self.best_score = candidate.score
-                self.best_id = candidate.id
+                self.best_id = candidate.node.id
 
         # Add the new embeddings to the candidate set.
         self.candidate_embeddings = np.vstack(
@@ -273,3 +258,6 @@ class MmrScoringNodeSelector:
                 new_embeddings,
             )
         )
+
+    def finalize_nodes(self, nodes: Iterable[Node]) -> Iterable[Node]:
+        return nodes

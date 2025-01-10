@@ -13,10 +13,10 @@ from langchain_core.vectorstores import VectorStore
 if TYPE_CHECKING:
     pass
 
-from .graph_traversal_adapter import GraphTraversalAdapter
+from .base import StoreAdapter
 
 
-class CassandraGraphTraversalAdapter(GraphTraversalAdapter):
+class CassandraStoreAdapter(StoreAdapter):
     def __init__(self, vector_store: VectorStore):
         from langchain_community.vectorstores import Cassandra
 

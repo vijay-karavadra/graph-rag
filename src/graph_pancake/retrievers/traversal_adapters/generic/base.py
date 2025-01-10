@@ -17,16 +17,18 @@ from langchain_core.vectorstores import VectorStore
 
 StoreT = TypeVar("StoerT", bound=VectorStore)
 
+METADATA_EMBEDDING_KEY = "__embedding"
 
-class GraphTraversalAdapter(Generic[StoreT]):
+
+class StoreAdapter(Generic[StoreT]):
     vector_store: StoreT
 
     @property
     def _safe_embedding(self) -> Embeddings:
-        if not self._base_vector_store.embeddings:
+        if not self.vector_store.embeddings:
             msg = "Missing embedding"
             raise ValueError(msg)
-        return self._base_vector_store.embeddings
+        return self.vector_store.embeddings
 
     def similarity_search_with_embedding(
         self,
