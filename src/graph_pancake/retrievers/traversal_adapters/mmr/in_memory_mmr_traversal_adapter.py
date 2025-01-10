@@ -10,10 +10,12 @@ from typing import (
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
-from .traversal_adapter import TraversalAdapter
+from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
+
+from .mmr_traversal_adapter import MMRTraversalAdapter
 
 
-class InMemoryTraversalAdapter(TraversalAdapter):
+class InMemoryMMRTraversalAdapter(MMRTraversalAdapter):
     def __init__(
         self, vector_store: VectorStore, support_normalized_metadata: bool = False
     ):
@@ -39,7 +41,7 @@ class InMemoryTraversalAdapter(TraversalAdapter):
                     return True
         return False
 
-    def similarity_search_by_vector(  # type: ignore
+    def similarity_search_with_embedding_by_vector(  # type: ignore
         self,
         embedding: List[float],
         k: int = 4,
@@ -58,9 +60,15 @@ class InMemoryTraversalAdapter(TraversalAdapter):
 
             return True
 
-        return self._vector_store.similarity_search_by_vector(
+        docs = self._vector_store.similarity_search_by_vector(
             embedding=embedding,
             k=k,
             filter=filter_method,
             **kwargs,
         )
+
+        for doc in docs:
+            embedding = self._vector_store.store[doc.id]["vector"]
+            doc.metadata[METADATA_EMBEDDING_KEY] = embedding
+
+        return docs

@@ -2,9 +2,9 @@ from typing import Iterable
 
 from langchain_core.documents import Document
 
-from .node import Node
+from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
 
-METADATA_EMBEDDING_KEY = "__embedding"
+from .node import Node
 
 
 class DocumentCache:

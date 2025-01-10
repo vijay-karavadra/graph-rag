@@ -3,7 +3,7 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-METADATA_EMBEDDING_KEY = "__embedding"
+from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
 
 
 @dataclasses.dataclass

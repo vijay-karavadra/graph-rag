@@ -1,11 +1,10 @@
 import json
-import random
-from typing import Any, Iterable
+from typing import Any
 
 import pytest
+from conftest import sorted_doc_ids
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
 from graph_pancake.retrievers.graph_traversal_retriever import (
     Edge,
@@ -15,48 +14,11 @@ from graph_pancake.retrievers.traversal_adapters.eager import (
     InMemoryTraversalAdapter,
     TraversalAdapter,
 )
-from tests.embeddings import SimpleEmbeddings
-
-
-class ParserEmbeddings(Embeddings):
-    """Parse input texts: if they are json for a List[float], fine.
-    Otherwise, return all zeros and call it a day.
-    """
-
-    def __init__(self, dimension: int) -> None:
-        self.dimension = dimension
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        try:
-            vals = json.loads(text)
-        except json.JSONDecodeError:
-            return [0.0] * self.dimension
-        else:
-            assert len(vals) == self.dimension
-            return vals
-
-
-class EarthEmbeddings(Embeddings):
-    def get_vector_near(self, value: float) -> list[float]:
-        base_point = [value, (1 - value**2) ** 0.5]
-        fluctuation = random.random() / 100.0
-        return [base_point[0] + fluctuation, base_point[1] - fluctuation]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        words = set(text.lower().split())
-        if "earth" in words:
-            vector = self.get_vector_near(0.9)
-        elif {"planet", "world", "globe", "sphere"}.intersection(words):
-            vector = self.get_vector_near(0.8)
-        else:
-            vector = self.get_vector_near(0.1)
-        return vector
+from tests.embeddings import (
+    AnimalEmbeddings,
+    EarthEmbeddings,
+    ParserEmbeddings,
+)
 
 
 class FakeAdapter(TraversalAdapter):
@@ -168,74 +130,6 @@ def test_get_denormalized_metadata_filter() -> None:
     ) == {"place.berlin": True}
 
 
-def _doc_ids(docs: Iterable[Document]) -> list[str]:
-    return sorted([doc.id for doc in docs if doc.id is not None])
-
-
-@pytest.fixture
-def graph_vector_store_docs() -> list[Document]:
-    """
-    This is a set of Documents to pre-populate a graph vector store,
-    with entries placed in a certain way.
-
-    Space of the entries (under Euclidean similarity):
-
-                      A0    (*)
-        ....        AL   AR       <....
-        :              |              :
-        :              |  ^           :
-        v              |  .           v
-                       |   :
-       TR              |   :          BL
-    T0   --------------x--------------   B0
-       TL              |   :          BR
-                       |   :
-                       |  .
-                       | .
-                       |
-                    FL   FR
-                      F0
-
-    the query point is meant to be at (*).
-    the A are bidirectionally with B
-    the A are outgoing to T
-    the A are incoming from F
-    The links are like: L with L, 0 with 0 and R with R.
-    """
-
-    docs_a = [
-        Document(id="AL", page_content="[-1, 9]", metadata={"label": "AL"}),
-        Document(id="A0", page_content="[0, 10]", metadata={"label": "A0"}),
-        Document(id="AR", page_content="[1, 9]", metadata={"label": "AR"}),
-    ]
-    docs_b = [
-        Document(id="BL", page_content="[9, 1]", metadata={"label": "BL"}),
-        Document(id="B0", page_content="[10, 0]", metadata={"label": "B0"}),
-        Document(id="BR", page_content="[9, -1]", metadata={"label": "BR"}),
-    ]
-    docs_f = [
-        Document(id="FL", page_content="[1, -9]", metadata={"label": "FL"}),
-        Document(id="F0", page_content="[0, -10]", metadata={"label": "F0"}),
-        Document(id="FR", page_content="[-1, -9]", metadata={"label": "FR"}),
-    ]
-    docs_t = [
-        Document(id="TL", page_content="[-9, -1]", metadata={"label": "TL"}),
-        Document(id="T0", page_content="[-10, 0]", metadata={"label": "T0"}),
-        Document(id="TR", page_content="[-9, 1]", metadata={"label": "TR"}),
-    ]
-    for doc_a, suffix in zip(docs_a, ["l", "0", "r"]):
-        doc_a.metadata["tag"] = f"ab_{suffix}"
-        doc_a.metadata["out"] = f"at_{suffix}"
-        doc_a.metadata["in"] = f"af_{suffix}"
-    for doc_b, suffix in zip(docs_b, ["l", "0", "r"]):
-        doc_b.metadata["tag"] = f"ab_{suffix}"
-    for doc_t, suffix in zip(docs_t, ["l", "0", "r"]):
-        doc_t.metadata["in"] = f"at_{suffix}"
-    for doc_f, suffix in zip(docs_f, ["l", "0", "r"]):
-        doc_f.metadata["out"] = f"af_{suffix}"
-    return docs_a + docs_b + docs_f + docs_t
-
-
 def test_traversal() -> None:
     greetings = Document(
         id="greetings",
@@ -270,13 +164,13 @@ def test_traversal() -> None:
     )
 
     docs = retriever.invoke("Earth", start_k=1, depth=0)
-    assert _doc_ids(docs) == ["doc2"]
+    assert sorted_doc_ids(docs) == ["doc2"]
 
     docs = retriever.invoke("Earth", depth=0)
-    assert _doc_ids(docs) == ["doc1", "doc2"]
+    assert sorted_doc_ids(docs) == ["doc1", "doc2"]
 
     docs = retriever.invoke("Earth", start_k=1, depth=1)
-    assert set(_doc_ids(docs)) == {"doc1", "doc2", "greetings"}
+    assert set(sorted_doc_ids(docs)) == {"doc1", "doc2", "greetings"}
 
 
 def assert_document_format(doc: Document) -> None:
@@ -287,6 +181,28 @@ def assert_document_format(doc: Document) -> None:
 
 
 class TestGraphTraversal:
+    @pytest.fixture(scope="class")
+    def animal_docs(self) -> list[Document]:
+        documents = []
+        with open("tests/data/animals.jsonl", "r") as file:
+            for line in file:
+                data = json.loads(line.strip())
+                documents.append(
+                    Document(
+                        id=data["id"],
+                        page_content=data["text"],
+                        metadata=data["metadata"],
+                    )
+                )
+
+        return documents
+
+    @pytest.fixture(scope="class")
+    def animal_vector_store(self, animal_docs: list[Document]) -> VectorStore:
+        store = InMemoryVectorStore(embedding=AnimalEmbeddings())
+        store.add_documents(animal_docs)
+        return store
+
     def test_invoke_sync(
         self,
         graph_vector_store_docs: list[Document],
@@ -338,167 +254,123 @@ class TestGraphTraversal:
         assert ss_labels == {"AR", "A0", "BR", "B0", "TR", "T0"}
         assert_document_format(docs[0])
 
+    @pytest.mark.parametrize("support_normalized_metadata", [False, True])
+    def test_animals_sync(
+        self,
+        support_normalized_metadata: bool,
+        animal_vector_store: VectorStore,
+    ) -> None:
+        query = "small agile mammal"
 
-@pytest.fixture
-def animal_docs() -> list[Document]:
-    documents = []
-    with open("tests/data/animals.jsonl", "r") as file:
-        for line in file:
-            data = json.loads(line.strip())
-            documents.append(
-                Document(
-                    id=data["id"],
-                    page_content=data["text"],
-                    metadata=data["metadata"],
-                )
-            )
+        depth_0_expected = ["fox", "mongoose"]
 
-    return documents
+        # test non-graph search
+        docs = animal_vector_store.similarity_search(query, k=2)
+        assert sorted_doc_ids(docs) == depth_0_expected
 
+        # test graph-search on a normalized bi-directional edge
+        retriever = GraphTraversalRetriever(
+            store=InMemoryTraversalAdapter(
+                vector_store=animal_vector_store,
+                support_normalized_metadata=support_normalized_metadata,
+            ),
+            edges=["keywords"],
+            start_k=2,
+        )
 
-def test_animals_sync(animal_docs: list[Document]) -> None:
-    vector_store = InMemoryVectorStore(embedding=SimpleEmbeddings())
+        docs = retriever.invoke(query, depth=0)
+        assert sorted_doc_ids(docs) == depth_0_expected
 
-    vector_store.add_documents(animal_docs)
+        docs = retriever.invoke(query, depth=1)
+        assert (
+            sorted_doc_ids(docs)
+            == ["cat", "coyote", "fox", "gazelle", "hyena", "jackal", "mongoose"]
+            if support_normalized_metadata
+            else depth_0_expected
+        )
 
-    # test non-graph search
-    docs = vector_store.similarity_search("hedgehog", k=2)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
+        docs = retriever.invoke(query, depth=2)
+        assert (
+            sorted_doc_ids(docs)
+            == [
+                "alpaca",
+                "bison",
+                "cat",
+                "chicken",
+                "cockroach",
+                "coyote",
+                "crow",
+                "dingo",
+                "dog",
+                "fox",
+                "gazelle",
+                "horse",
+                "hyena",
+                "jackal",
+                "llama",
+                "mongoose",
+                "ostrich",
+            ]
+            if support_normalized_metadata
+            else depth_0_expected
+        )
 
-    # test graph-search without normalized support
-    # on a normalized bi-directional edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=False,
-        ),
-        edges=["keywords"],
-        start_k=2,
-    )
+        # test graph-search on a standard bi-directional edge
+        retriever = GraphTraversalRetriever(
+            store=InMemoryTraversalAdapter(
+                vector_store=animal_vector_store,
+                support_normalized_metadata=support_normalized_metadata,
+            ),
+            edges=["habitat"],
+            start_k=2,
+        )
 
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
+        docs = retriever.invoke(query, depth=0)
+        assert sorted_doc_ids(docs) == depth_0_expected
 
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
+        docs = retriever.invoke(query, depth=1)
+        assert sorted_doc_ids(docs) == [
+            "bobcat",
+            "cobra",
+            "deer",
+            "elk",
+            "fox",
+            "mongoose",
+        ]
 
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
+        docs = retriever.invoke(query, depth=2)
+        assert sorted_doc_ids(docs) == [
+            "bobcat",
+            "cobra",
+            "deer",
+            "elk",
+            "fox",
+            "mongoose",
+        ]
 
-    # test graph-search with normalized support
-    # on a normalized bi-directional edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=True,
-        ),
-        edges=["keywords"],
-        start_k=2,
-    )
+        # test graph-search on a standard -> normalized edge
+        retriever = GraphTraversalRetriever(
+            store=InMemoryTraversalAdapter(
+                vector_store=animal_vector_store,
+                support_normalized_metadata=support_normalized_metadata,
+            ),
+            edges=[("habitat", "keywords")],
+            start_k=2,
+        )
 
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
+        docs = retriever.invoke(query, depth=0)
+        assert sorted_doc_ids(docs) == depth_0_expected
 
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["cat", "coyote", "fox", "gazelle", "hedgehog", "mongoose"]
+        docs = retriever.invoke(query, depth=1)
+        assert (
+            sorted_doc_ids(docs) == ["bear", "bobcat", "fox", "mongoose"]
+            if support_normalized_metadata
+            else depth_0_expected
+        )
 
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == [
-        "alpaca",
-        "bison",
-        "cat",
-        "chicken",
-        "coyote",
-        "crow",
-        "dingo",
-        "dog",
-        "fox",
-        "gazelle",
-        "hedgehog",
-        "horse",
-        "hyena",
-        "jackal",
-        "llama",
-        "mongoose",
-        "ostrich",
-    ]
-
-    # test graph-search without normalized support
-    # on a standard bi-directional edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=False,
-        ),
-        edges=["habitat"],
-        start_k=2,
-    )
-
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["antelope", "buffalo", "coyote", "fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == ["antelope", "buffalo", "coyote", "fox", "hedgehog"]
-
-    # test graph-search with normalized support
-    # on a standard bi-directional edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=True,
-        ),
-        edges=["habitat"],
-        start_k=2,
-    )
-
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["antelope", "buffalo", "coyote", "fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == ["antelope", "buffalo", "coyote", "fox", "hedgehog"]
-
-    # test graph-search without normalized support
-    # on a standard -> normalized edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=False,
-        ),
-        edges=[("habitat", "keywords")],
-        start_k=2,
-    )
-
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    # test graph-search with normalized support
-    # on a standard -> normalized edge
-    retriever = GraphTraversalRetriever(
-        store=InMemoryTraversalAdapter(
-            vector_store=vector_store,
-            support_normalized_metadata=True,
-        ),
-        edges=[("habitat", "keywords")],
-        start_k=2,
-    )
-
-    docs = retriever.invoke("hedgehog", depth=0)
-    assert _doc_ids(docs) == ["fox", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=1)
-    assert _doc_ids(docs) == ["bison", "fox", "gazelle", "hedgehog"]
-
-    docs = retriever.invoke("hedgehog", depth=2)
-    assert _doc_ids(docs) == ["aardvark", "bison", "fox", "gazelle", "hedgehog"]
+        docs = retriever.invoke(query, depth=2)
+        assert (
+            sorted_doc_ids(docs) == ["bear", "bobcat", "caribou", "fox", "mongoose"]
+            if support_normalized_metadata
+            else depth_0_expected
+        )

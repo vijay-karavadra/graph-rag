@@ -724,7 +724,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "cassandra-driver" },
     { name = "cassio" },
     { name = "langchain-astradb" },
     { name = "langchain-chroma" },
@@ -734,7 +733,6 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "sentence-transformers" },
 ]
 
 [package.metadata]
@@ -748,7 +746,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "cassandra-driver", specifier = ">=3.29.2" },
     { name = "cassio", specifier = ">=0.1.10" },
     { name = "langchain-astradb", specifier = ">=0.5.2" },
     { name = "langchain-chroma", git = "https://github.com/langchain-ai/langchain.git?subdirectory=libs%2Fpartners%2Fchroma" },
@@ -758,7 +755,6 @@ dev = [
     { name = "mypy", specifier = ">=1.14.1" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-asyncio", specifier = ">=0.25.2" },
-    { name = "sentence-transformers", specifier = ">=3.3.1" },
 ]
 
 [[package]]

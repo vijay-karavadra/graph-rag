@@ -12,11 +12,11 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, PrivateAttr
 
+from graph_pancake.retrievers.consts import BASIC_TYPES
+
 from .document_cache import OldDocumentCache as DocumentCache
 from .edge import Edge
 from .traversal_adapters.eager import TraversalAdapter
-
-BASIC_TYPES = (str, bool, int, float, complex, bytes)
 
 
 # this class uses pydantic, so store and edges

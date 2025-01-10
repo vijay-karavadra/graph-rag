@@ -14,13 +14,13 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, PrivateAttr
 
+from graph_pancake.retrievers.consts import BASIC_TYPES
+
 from .document_cache import DocumentCache
 from .edge import Edge
 from .node import Node
 from .node_selectors.node_selector import NodeSelector
 from .traversal_adapters.generic.graph_traversal_adapter import GraphTraversalAdapter
-
-BASIC_TYPES = (str, bool, int, float, complex, bytes)
 
 
 # this class uses pydantic, so store and edges
