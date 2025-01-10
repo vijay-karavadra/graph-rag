@@ -7,9 +7,7 @@ from .node_selector import NodeSelector
 class EagerNodeSelector(NodeSelector):
     """Node selection that selects all nodes at each step."""
 
-    def __init__(
-        self, **kwargs: dict[str, Any]
-    ) -> None:
+    def __init__(self, **kwargs: dict[str, Any]) -> None:
         self._nodes = []
 
     def add_nodes(self, nodes: dict[str, Node]) -> None:

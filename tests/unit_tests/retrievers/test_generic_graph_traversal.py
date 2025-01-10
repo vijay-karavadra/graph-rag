@@ -11,11 +11,12 @@ from graph_pancake.retrievers.generic_graph_traversal_retriever import (
 from graph_pancake.retrievers.node_selectors.eager_node_selector import (
     EagerNodeSelector,
 )
-from graph_pancake.retrievers.node_selectors.mmr_scoring_node_selector import MmrScoringNodeSelector
+from graph_pancake.retrievers.node_selectors.mmr_scoring_node_selector import (
+    MmrScoringNodeSelector,
+)
 from graph_pancake.retrievers.traversal_adapters.generic.in_memory import (
     InMemoryStoreAdapter,
 )
-
 from tests.embeddings.fake_embeddings import AngularTwoDimensionalEmbeddings
 from tests.embeddings.simple_embeddings import AnimalEmbeddings, ParserEmbeddings
 
@@ -219,6 +220,7 @@ def test_animals_eager_item_to_collection(animal_store_adapter: InMemoryStoreAda
 
     docs = retriever.invoke(ANIMALS_QUERY, max_depth=2)
     assert sorted_doc_ids(docs) == ["bear", "bobcat", "caribou", "fox", "mongoose"]
+
 
 def test_mmr_traversal() -> None:
     """ Test end to end construction and MMR search.

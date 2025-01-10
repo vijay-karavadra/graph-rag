@@ -5,7 +5,6 @@ from typing import (
     Generic,
     Iterable,
     List,
-    Optional,
     ParamSpec,
     Sequence,
     Tuple,
