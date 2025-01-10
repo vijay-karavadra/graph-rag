@@ -15,7 +15,7 @@ from langchain_core.vectorstores import VectorStore
 if TYPE_CHECKING:
     pass
 
-from graph_pancake.retrievers.document_cache import METADATA_EMBEDDING_KEY
+from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
 
 from .graph_traversal_adapter import GraphTraversalAdapter
 

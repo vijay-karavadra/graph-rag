@@ -3,13 +3,17 @@ from .fake_embeddings import (
     ConsistentFakeEmbeddings,
     FakeEmbeddings,
 )
-from .simple_embeddings import EarthEmbeddings, ParserEmbeddings, SimpleEmbeddings
+from .simple_embeddings import (
+    AnimalEmbeddings,
+    EarthEmbeddings,
+    ParserEmbeddings,
+)
 
 __all__ = [
+    "AnimalEmbeddings",
     "AngularTwoDimensionalEmbeddings",
     "ConsistentFakeEmbeddings",
     "EarthEmbeddings",
     "FakeEmbeddings",
     "ParserEmbeddings",
-    "SimpleEmbeddings",
 ]

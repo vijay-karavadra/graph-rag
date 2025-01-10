@@ -25,11 +25,11 @@ docker-down:
 
 .PHONY: integration
 integration:
-	uv run pytest ./tests/integration_tests/
+	uv run pytest -v ./tests/integration_tests/
 
 .PHONY: unit
 unit:
-	uv run pytest ./tests/unit_tests/
+	uv run pytest -vs ./tests/unit_tests/
 
 .PHONY: mypy
 mypy:

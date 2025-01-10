@@ -11,7 +11,7 @@ from typing import (
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 
-from graph_pancake.retrievers.document_cache import METADATA_EMBEDDING_KEY
+from graph_pancake.retrievers.consts import METADATA_EMBEDDING_KEY
 
 from .mmr_traversal_adapter import MMRTraversalAdapter
 

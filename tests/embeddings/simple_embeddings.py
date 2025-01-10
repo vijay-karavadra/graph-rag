@@ -1,18 +1,24 @@
 import json
 import random
+from abc import abstractmethod
 
-import sentence_transformers
 from langchain_core.embeddings import Embeddings
 
 
-class EarthEmbeddings(Embeddings):
+class BaseEmbeddings(Embeddings):
+    @abstractmethod
+    def embed_query(self, text: str) -> list[float]:
+        pass
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self.embed_query(txt) for txt in texts]
+
+
+class EarthEmbeddings(BaseEmbeddings):
     def get_vector_near(self, value: float) -> list[float]:
         base_point = [value, (1 - value**2) ** 0.5]
         fluctuation = random.random() / 100.0
         return [base_point[0] + fluctuation, base_point[1] - fluctuation]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
 
     def embed_query(self, text: str) -> list[float]:
         words = set(text.lower().split())
@@ -25,16 +31,13 @@ class EarthEmbeddings(Embeddings):
         return vector
 
 
-class ParserEmbeddings(Embeddings):
+class ParserEmbeddings(BaseEmbeddings):
     """Parse input texts: if they are json for a List[float], fine.
     Otherwise, return all zeros and call it a day.
     """
 
     def __init__(self, dimension: int) -> None:
         self.dimension = dimension
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self.embed_query(txt) for txt in texts]
 
     def embed_query(self, text: str) -> list[float]:
         try:
@@ -46,51 +49,51 @@ class ParserEmbeddings(Embeddings):
             return vals
 
 
-class SimpleEmbeddings(Embeddings):
-    def __init__(self):
-        self._client = sentence_transformers.SentenceTransformer("all-MiniLM-L6-v2")
+def string_to_number(word: str) -> int:
+    return sum(ord(char) for char in word)
 
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        """
-        Embed a text using the all-MiniLM-L6-v2 transformer model.
 
-        Args:
-            texts: The list of texts to embed.
-
-        Returns:
-            List of embeddings, one for each text.
-        """
-
-        texts = list(map(lambda x: x.replace("\n", " "), texts))
-
-        embeddings = self._client.encode(texts)
-
-        if isinstance(embeddings, list):
-            raise TypeError(
-                "Expected embeddings to be a Tensor or a numpy array, "
-                "got a list instead."
-            )
-
-        return embeddings.tolist()
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Compute doc embeddings using the all-MiniLM-L6-v2 transformer model.
-
-        Args:
-            texts: The list of texts to embed.
-
-        Returns:
-            List of embeddings, one for each text.
-        """
-        return self._embed(texts)
+class WordEmbeddings(BaseEmbeddings):
+    def __init__(self, words: list[str]):
+        self._words = words
+        self._offsets = [
+            string_to_number(word=word) * ((-1) ** i) for i, word in enumerate(words)
+        ]
 
     def embed_query(self, text: str) -> list[float]:
-        """Compute query embeddings the all-MiniLM-L6-v2 transformer model.
+        return [
+            1.0 + (100 / self._offsets[i]) if word in text else 0.2 / (i + 1)
+            for i, word in enumerate(self._words)
+        ]
 
-        Args:
-            text: The text to embed.
 
-        Returns:
-            Embeddings for the text.
-        """
-        return self._embed([text])[0]
+class AnimalEmbeddings(WordEmbeddings):
+    def __init__(self):
+        super().__init__(
+            words="""
+            alli alpa amer amph ante ante antl appe aqua arct arma aust babo
+            badg barr bask bear beav beet beha bird biso bite blac blue boar
+            bobc brig buff bugl burr bush butt came cani capy cari carn cass
+            cate cham chee chic chim chin chir clim coas coat cobr cock colo
+            colo comm comp cour coyo crab cran croa croc crow crus wing wool
+            cult cunn curi curl damb danc deer defe defe deme dese digg ding
+            dise dist dive dolp dome dome donk dove drag drag duck ecos effo
+            eigh elab eleg elev elon euca extr eyes falc famo famo fast fast
+            feat feet ferr fier figh finc fish flam flig flig food fore foun
+            fres frie frog gaze geck gees gent gill gira goat gori grac gras
+            gras graz grou grou grou guin hams hard hawk hedg herb herd hero
+            high hipp honk horn hors hove howl huma humm hump hunt hyen iden
+            igua inde inse inte jack jagu jell jump jung kang koal komo lark
+            larv lemu leop life lion liza lobs long loud loya mada magp mamm
+            mana mari mars mass mati meat medi melo meta migr milk mimi moos
+            mosq moth narw nati natu neck newt noct nort ocea octo ostr pack
+            pain patt peac pest pinc pink play plum poll post pouc powe prec
+            pred prey prid prim prob prot prow quac quil rais rapi reac rega
+            rege regi rego rein rept resi rive roam rode sava scav seab seaf
+            seas semi shar shed shel skil smal snak soci soft soli song song
+            soun sout spec spee spik spor spot stag stic stin stin stor stre
+            stre stre stro surv surv sust symb tail tall talo team teet tent
+            term terr thou tiny tong toug tree agil tuft tund tusk umbr unic
+            uniq vast vege veno vibr vita vora wadi wasp wate webb wetl wild
+            ant bat bee cat cow dog eel elk emu fox pet pig""".split()
+        )
