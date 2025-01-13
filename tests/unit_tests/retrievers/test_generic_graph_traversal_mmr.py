@@ -11,8 +11,8 @@ from graph_pancake.retrievers.node_selectors.mmr_scoring_node_selector import (
 from graph_pancake.retrievers.traversal_adapters.generic.in_memory import (
     InMemoryStoreAdapter,
 )
+from tests.conftest import sorted_doc_ids
 from tests.embeddings.fake_embeddings import AngularTwoDimensionalEmbeddings
-from tests.unit_tests.retrievers.conftest import sorted_doc_ids
 
 
 @pytest.fixture(scope="function", params=[False, True])

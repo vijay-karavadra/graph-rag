@@ -1,5 +1,3 @@
-import json
-
 import pytest
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
@@ -10,15 +8,15 @@ from graph_pancake.retrievers.graph_mmr_traversal_retriever import (
 from graph_pancake.retrievers.traversal_adapters.mmr import (
     InMemoryMMRTraversalAdapter,
 )
+from tests.conftest import assert_document_format, sorted_doc_ids
 from tests.embeddings import (
-    AngularTwoDimensionalEmbeddings,
-    AnimalEmbeddings,
     ParserEmbeddings,
 )
-from tests.unit_tests.retrievers.conftest import assert_document_format, sorted_doc_ids
 
 
-def test_mmr_traversal() -> None:
+@pytest.mark.parametrize("vector_store_type", ["in-memory"])
+@pytest.mark.parametrize("embedding_type", ["angular"])
+def test_mmr_traversal(vector_store: VectorStore, vector_store_type: str) -> None:
     """ Test end to end construction and MMR search.
     The embedding function used here ensures `texts` become
     the following vectors on a circle (numbered v0 through v3):
@@ -46,7 +44,6 @@ def test_mmr_traversal() -> None:
     v2.metadata["incoming"] = "link"
     v3.metadata["incoming"] = "link"
 
-    vector_store = InMemoryVectorStore(embedding=AngularTwoDimensionalEmbeddings())
     vector_store.add_documents([v0, v1, v2, v3])
 
     retriever = GraphMMRTraversalRetriever(
@@ -79,28 +76,6 @@ def test_mmr_traversal() -> None:
 
 
 class TestMmrGraphTraversal:
-    @pytest.fixture(scope="class")
-    def animal_docs(self) -> list[Document]:
-        documents = []
-        with open("tests/data/animals.jsonl", "r") as file:
-            for line in file:
-                data = json.loads(line.strip())
-                documents.append(
-                    Document(
-                        id=data["id"],
-                        page_content=data["text"],
-                        metadata=data["metadata"],
-                    )
-                )
-
-        return documents
-
-    @pytest.fixture(scope="class")
-    def animal_vector_store(self, animal_docs: list[Document]) -> VectorStore:
-        store = InMemoryVectorStore(embedding=AnimalEmbeddings())
-        store.add_documents(animal_docs)
-        return store
-
     def test_invoke_sync(
         self,
         graph_vector_store_docs: list[Document],
@@ -145,24 +120,28 @@ class TestMmrGraphTraversal:
         assert docs[0].metadata
         assert_document_format(docs[0])
 
+    @pytest.mark.parametrize("vector_store_type", ["in-memory"])
+    @pytest.mark.parametrize("embedding_type", ["animal"])
     @pytest.mark.parametrize("support_normalized_metadata", [False, True])
     def test_animals_sync(
         self,
         support_normalized_metadata: bool,
-        animal_vector_store: VectorStore,
+        vector_store: VectorStore,
+        animal_docs: list[Document],
     ) -> None:
-        query = "small agile mammal"
+        vector_store.add_documents(animal_docs)
 
+        query = "small agile mammal"
         depth_0_expected = ["fox", "mongoose"]
 
         # test non-graph search
-        docs = animal_vector_store.similarity_search(query, k=2)
+        docs = vector_store.similarity_search(query, k=2)
         assert sorted_doc_ids(docs) == depth_0_expected
 
         # test graph-search on a normalized bi-directional edge
         retriever = GraphMMRTraversalRetriever(
             store=InMemoryMMRTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=["keywords"],
@@ -191,7 +170,7 @@ class TestMmrGraphTraversal:
         # test graph-search on a standard bi-directional edge
         retriever = GraphMMRTraversalRetriever(
             store=InMemoryMMRTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=["habitat"],
@@ -211,7 +190,7 @@ class TestMmrGraphTraversal:
         # test graph-search on a standard -> normalized edge
         retriever = GraphMMRTraversalRetriever(
             store=InMemoryMMRTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=[("habitat", "keywords")],

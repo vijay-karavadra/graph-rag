@@ -1,7 +1,10 @@
 from typing import (
     Any,
+    Dict,
     List,
+    Optional,
     Sequence,
+    Tuple,
     cast,
 )
 
@@ -18,6 +21,40 @@ class CassandraMMRTraversalAdapter(MMRTraversalAdapter):
         from langchain_community.vectorstores import Cassandra
 
         self._vector_store = cast(Cassandra, vector_store)
+        self._base_vector_store = vector_store
+
+    async def asimilarity_search_with_embedding(
+        self,
+        query: str,
+        k: int = 4,
+        filter: Optional[Dict[str, str]] = None,
+        **kwargs: Any,
+    ) -> Tuple[List[float], List[Document]]:
+        """Returns docs (with embeddings) most similar to the query.
+
+        Also returns the embedded query vector.
+
+        Args:
+            query: Input text.
+            k: Number of Documents to return. Defaults to 4.
+            filter: Filter on the metadata to apply.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            A tuple of:
+                * The embedded query vector
+                * List of Documents most similar to the query vector.
+                  Documents should have their embedding added to
+                  their metadata under the METADATA_EMBEDDING_KEY key.
+        """
+        query_embedding = self._safe_embedding.embed_query(text=query)
+        docs = await self.asimilarity_search_with_embedding_by_vector(
+            embedding=query_embedding,
+            k=k,
+            filter=filter,
+            **kwargs,
+        )
+        return query_embedding, docs
 
     def similarity_search_with_embedding_by_vector(  # type: ignore
         self, **kwargs: Any
@@ -25,12 +62,29 @@ class CassandraMMRTraversalAdapter(MMRTraversalAdapter):
         msg = "use the async implementation instead."
         raise NotImplementedError(msg)
 
-    async def asimilarity_search_with_embedding_by_vector(  # type: ignore
-        self, **kwargs: Any
+    async def asimilarity_search_with_embedding_by_vector(
+        self,
+        embedding: List[float],
+        k: int = 4,
+        filter: Optional[Dict[str, str]] = None,
+        **kwargs: Any,
     ) -> List[Document]:
+        """Returns docs (with embeddings) most similar to the query vector.
+
+        Args:
+            embedding: Embedding to look up documents similar to.
+            k: Number of Documents to return. Defaults to 4.
+            filter: Filter on the metadata to apply.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            List of Documents most similar to the query vector.
+                Documents should have their embedding added to
+                their metadata under the METADATA_EMBEDDING_KEY key.
+        """
         results = (
             await self._vector_store.asimilarity_search_with_embedding_id_by_vector(
-                **kwargs
+                embedding=embedding, k=k, filter=filter, **kwargs
             )
         )
         docs: List[Document] = []
