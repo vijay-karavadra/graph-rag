@@ -1,7 +1,11 @@
+import json
 from typing import Iterable
 
 import pytest
 from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
+
+from tests.embeddings.simple_embeddings import AnimalEmbeddings
 
 
 def sorted_doc_ids(docs: Iterable[Document]) -> list[str]:
@@ -13,6 +17,30 @@ def assert_document_format(doc: Document) -> None:
     assert doc.page_content is not None
     assert doc.metadata is not None
     assert "__embedding" not in doc.metadata
+
+
+@pytest.fixture(scope="module")
+def animal_docs() -> list[Document]:
+    documents = []
+    with open("tests/data/animals.jsonl", "r") as file:
+        for line in file:
+            data = json.loads(line.strip())
+            documents.append(
+                Document(
+                    id=data["id"],
+                    page_content=data["text"],
+                    metadata=data["metadata"],
+                )
+            )
+
+    return documents
+
+
+@pytest.fixture(scope="module")
+def animal_store(animal_docs: list[Document]) -> InMemoryVectorStore:
+    store = InMemoryVectorStore(embedding=AnimalEmbeddings())
+    store.add_documents(animal_docs)
+    return store
 
 
 @pytest.fixture

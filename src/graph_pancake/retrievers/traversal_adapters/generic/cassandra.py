@@ -3,7 +3,6 @@ from typing import (
     Any,
     List,
     Sequence,
-    Tuple,
     cast,
 )
 
@@ -13,7 +12,7 @@ from langchain_core.vectorstores import VectorStore
 if TYPE_CHECKING:
     pass
 
-from .base import StoreAdapter
+from .base import METADATA_EMBEDDING_KEY, StoreAdapter
 
 
 class CassandraStoreAdapter(StoreAdapter):
@@ -22,27 +21,26 @@ class CassandraStoreAdapter(StoreAdapter):
 
         self._vector_store = cast(Cassandra, vector_store)
 
-    def similarity_search_with_embedding(  # type: ignore
-        self, **kwargs: Any
-    ) -> Tuple[List[float], List[Document]]:
-        return self._vector_store.similarity_search_with_embedding(**kwargs)
-
-    async def asimilarity_search_with_embedding(  # type: ignore
-        self, **kwargs: Any
-    ) -> Tuple[List[float], List[Document]]:
-        return await self._vector_store.asimilarity_search_with_embedding(**kwargs)
-
     def similarity_search_with_embedding_by_vector(  # type: ignore
         self, **kwargs: Any
     ) -> List[Document]:
-        return self._vector_store.similarity_search_with_embedding_by_vector(**kwargs)
+        msg = "use the async implementation instead."
+        raise NotImplementedError(msg)
 
     async def asimilarity_search_with_embedding_by_vector(  # type: ignore
         self, **kwargs: Any
     ) -> List[Document]:
-        return await self._vector_store.asimilarity_search_with_embedding_by_vector(
-            **kwargs
+        results = (
+            await self._vector_store.asimilarity_search_with_embedding_id_by_vector(
+                **kwargs
+            )
         )
+        docs: List[Document] = []
+        for doc, embedding, id in results:
+            doc.metadata[METADATA_EMBEDDING_KEY] = embedding
+            doc.id = id
+            docs.append(doc)
+        return docs
 
     def get(self, ids: Sequence[str], /, **kwargs: Any) -> list[Document]:
         """Get documents by id."""

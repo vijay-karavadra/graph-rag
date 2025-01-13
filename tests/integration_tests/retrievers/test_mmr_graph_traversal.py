@@ -119,7 +119,7 @@ def get_cassandra_session(
     keyspace: str, table_name: str, drop: bool = True
 ) -> Generator[CassandraSession, None, None]:
     """Initialize the Cassandra cluster and session"""
-    from cassandra.cluster import Cluster
+    from cassandra.cluster import Cluster  # type: ignore
 
     if "CASSANDRA_CONTACT_POINTS" in os.environ:
         contact_points = [
@@ -218,7 +218,7 @@ def vector_store(
             engine="faiss",
         )
         yield store
-        if store.index_exists:
+        if store.index_exists():
             store.delete_index()  # store.index_name
     else:
         msg = f"Unknown vector store type: {vector_store_type}"

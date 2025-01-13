@@ -9,11 +9,12 @@ class EagerScoringNodeSelector(NodeSelector):
     """Node selection based on an eager scoring function."""
 
     def __init__(self, scorer: Callable[[Node], float], *, select_k: int = 1) -> None:
-        """Node selector choosing the top `select_k` nodes according to `scorer` each iteration.
+        """Node selector choosing the top `select_k` nodes according to `scorer`
+        in each iteration.
 
         Args:
-            - scorer: The scoring function to apply. Will only be applied when the node is added,
-              which means it is not re-executed if the `depth` changes.
+            - scorer: The scoring function to apply. Will only be applied when the
+              node is added, which means it is not re-executed if the `depth` changes.
             - select_k: The numebr of nodes to select at each iteration.
         """
         self._scorer = scorer

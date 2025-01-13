@@ -1,7 +1,6 @@
 import json
 
 import pytest
-from conftest import assert_document_format, sorted_doc_ids
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
@@ -16,6 +15,7 @@ from tests.embeddings import (
     AnimalEmbeddings,
     ParserEmbeddings,
 )
+from tests.unit_tests.retrievers.conftest import assert_document_format, sorted_doc_ids
 
 
 def test_mmr_traversal() -> None:

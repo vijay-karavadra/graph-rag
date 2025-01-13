@@ -68,7 +68,7 @@ class KeybertKeywordExtractor(BaseDocumentTransformer):
         model: str = "all-MiniLM-L6-v2",
     ):
         try:
-            import keybert
+            import keybert  # type: ignore
 
             self._kw_model = keybert.KeyBERT(model=model)
         except ImportError:

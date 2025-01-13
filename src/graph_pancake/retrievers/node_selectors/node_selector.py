@@ -3,7 +3,6 @@ from typing import Iterable, ParamSpec, Protocol, TypeVar, runtime_checkable
 
 from ..node import Node
 
-
 P = ParamSpec("P")
 T = TypeVar("T", bound="NodeSelector", covariant=True)
 

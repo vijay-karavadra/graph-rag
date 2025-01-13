@@ -1,11 +1,8 @@
 import asyncio
 from typing import (
     Any,
-    Callable,
-    Generic,
     Iterable,
     List,
-    ParamSpec,
     Sequence,
     Tuple,
     Union,
@@ -13,12 +10,12 @@ from typing import (
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
-from pydantic import ConfigDict, Field, computed_field
+from pydantic import Field, computed_field
 
 from .edge import Edge
 from .edge_helper import EdgeHelper
 from .node import Node
-from .node_selectors.node_selector import NodeSelector, NodeSelectorFactory
+from .node_selectors.node_selector import NodeSelectorFactory
 from .traversal_adapters.generic.base import METADATA_EMBEDDING_KEY, StoreAdapter
 
 INFINITY = float("inf")
