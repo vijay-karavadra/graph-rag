@@ -2,7 +2,6 @@ import json
 from typing import Any
 
 import pytest
-from conftest import sorted_doc_ids
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
@@ -19,6 +18,7 @@ from tests.embeddings import (
     EarthEmbeddings,
     ParserEmbeddings,
 )
+from tests.unit_tests.retrievers.conftest import sorted_doc_ids
 
 
 class FakeAdapter(TraversalAdapter):

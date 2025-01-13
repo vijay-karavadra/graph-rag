@@ -7,8 +7,8 @@ from langchain_core._api import beta
 from langchain_core.documents import BaseDocumentTransformer, Document
 
 if TYPE_CHECKING:
-    from bs4 import BeautifulSoup
-    from bs4.element import Tag
+    from bs4 import BeautifulSoup  # type: ignore
+    from bs4.element import Tag  # type: ignore
 
 
 @beta()

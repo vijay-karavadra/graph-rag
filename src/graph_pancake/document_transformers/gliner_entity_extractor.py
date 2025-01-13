@@ -66,7 +66,7 @@ class GLiNEREntityExtractor(BaseDocumentTransformer):
         model: str = "urchade/gliner_mediumv2.1",
     ):
         try:
-            from gliner import GLiNER
+            from gliner import GLiNER  # type: ignore
 
             self._model = GLiNER.from_pretrained(model)
 

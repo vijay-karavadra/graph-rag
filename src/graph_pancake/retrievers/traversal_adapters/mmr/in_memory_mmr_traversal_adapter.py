@@ -72,6 +72,7 @@ class InMemoryMMRTraversalAdapter(MMRTraversalAdapter):
         )
 
         for doc in docs:
+            assert doc.id is not None
             embedding = self._vector_store.store[doc.id]["vector"]
             doc.metadata[METADATA_EMBEDDING_KEY] = embedding
 
