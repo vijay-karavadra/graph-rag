@@ -1,9 +1,8 @@
-import json
 from typing import Any
 
 import pytest
 from langchain_core.documents import Document
-from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
+from langchain_core.vectorstores import VectorStore
 
 from graph_pancake.retrievers.graph_traversal_retriever import (
     Edge,
@@ -13,12 +12,7 @@ from graph_pancake.retrievers.traversal_adapters.eager import (
     InMemoryTraversalAdapter,
     TraversalAdapter,
 )
-from tests.embeddings import (
-    AnimalEmbeddings,
-    EarthEmbeddings,
-    ParserEmbeddings,
-)
-from tests.unit_tests.retrievers.conftest import sorted_doc_ids
+from tests.conftest import assert_document_format, sorted_doc_ids
 
 
 class FakeAdapter(TraversalAdapter):
@@ -133,7 +127,9 @@ def test_get_denormalized_metadata_filter() -> None:
     ) == {"place.berlin": True}
 
 
-def test_traversal() -> None:
+@pytest.mark.parametrize("vector_store_type", ["in-memory"])
+@pytest.mark.parametrize("embedding_type", ["earth"])
+def test_traversal(vector_store: VectorStore) -> None:
     greetings = Document(
         id="greetings",
         page_content="Typical Greetings",
@@ -153,7 +149,6 @@ def test_traversal() -> None:
         page_content="Hello Earth",
         metadata={"outgoing": "parent", "keywords": ["greeting", "earth"]},
     )
-    vector_store = InMemoryVectorStore(embedding=EarthEmbeddings())
     vector_store.add_documents([greetings, doc1, doc2])
 
     retriever = GraphTraversalRetriever(
@@ -176,42 +171,15 @@ def test_traversal() -> None:
     assert set(sorted_doc_ids(docs)) == {"doc1", "doc2", "greetings"}
 
 
-def assert_document_format(doc: Document) -> None:
-    assert doc.id is not None
-    assert doc.page_content is not None
-    assert doc.metadata is not None
-    assert "__embedding" not in doc.metadata
-
-
 class TestGraphTraversal:
-    @pytest.fixture(scope="class")
-    def animal_docs(self) -> list[Document]:
-        documents = []
-        with open("tests/data/animals.jsonl", "r") as file:
-            for line in file:
-                data = json.loads(line.strip())
-                documents.append(
-                    Document(
-                        id=data["id"],
-                        page_content=data["text"],
-                        metadata=data["metadata"],
-                    )
-                )
-
-        return documents
-
-    @pytest.fixture(scope="class")
-    def animal_vector_store(self, animal_docs: list[Document]) -> VectorStore:
-        store = InMemoryVectorStore(embedding=AnimalEmbeddings())
-        store.add_documents(animal_docs)
-        return store
-
+    @pytest.mark.parametrize("vector_store_type", ["in-memory"])
+    @pytest.mark.parametrize("embedding_type", ["parser-d2"])
     def test_invoke_sync(
         self,
+        vector_store: VectorStore,
         graph_vector_store_docs: list[Document],
     ) -> None:
         """Graph traversal search on a vector store."""
-        vector_store = InMemoryVectorStore(embedding=ParserEmbeddings(dimension=2))
         vector_store.add_documents(graph_vector_store_docs)
 
         retriever = GraphTraversalRetriever(
@@ -233,12 +201,14 @@ class TestGraphTraversal:
         assert ts_labels == {"AR", "A0", "BR", "B0", "TR", "T0"}
         assert_document_format(docs[0])
 
+    @pytest.mark.parametrize("vector_store_type", ["in-memory"])
+    @pytest.mark.parametrize("embedding_type", ["parser-d2"])
     async def test_invoke_async(
         self,
+        vector_store: VectorStore,
         graph_vector_store_docs: list[Document],
     ) -> None:
         """Graph traversal search on a graph store."""
-        vector_store = InMemoryVectorStore(embedding=ParserEmbeddings(dimension=2))
         await vector_store.aadd_documents(graph_vector_store_docs)
 
         retriever = GraphTraversalRetriever(
@@ -257,24 +227,29 @@ class TestGraphTraversal:
         assert ss_labels == {"AR", "A0", "BR", "B0", "TR", "T0"}
         assert_document_format(docs[0])
 
+    @pytest.mark.parametrize("vector_store_type", ["in-memory"])
+    @pytest.mark.parametrize("embedding_type", ["animal"])
     @pytest.mark.parametrize("support_normalized_metadata", [False, True])
     def test_animals_sync(
         self,
         support_normalized_metadata: bool,
-        animal_vector_store: VectorStore,
+        vector_store: VectorStore,
+        animal_docs: list[Document],
     ) -> None:
+        vector_store.add_documents(animal_docs)
+
         query = "small agile mammal"
 
         depth_0_expected = ["fox", "mongoose"]
 
         # test non-graph search
-        docs = animal_vector_store.similarity_search(query, k=2)
+        docs = vector_store.similarity_search(query, k=2)
         assert sorted_doc_ids(docs) == depth_0_expected
 
         # test graph-search on a normalized bi-directional edge
         retriever = GraphTraversalRetriever(
             store=InMemoryTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=["keywords"],
@@ -321,7 +296,7 @@ class TestGraphTraversal:
         # test graph-search on a standard bi-directional edge
         retriever = GraphTraversalRetriever(
             store=InMemoryTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=["habitat"],
@@ -354,7 +329,7 @@ class TestGraphTraversal:
         # test graph-search on a standard -> normalized edge
         retriever = GraphTraversalRetriever(
             store=InMemoryTraversalAdapter(
-                vector_store=animal_vector_store,
+                vector_store=vector_store,
                 support_normalized_metadata=support_normalized_metadata,
             ),
             edges=[("habitat", "keywords")],
