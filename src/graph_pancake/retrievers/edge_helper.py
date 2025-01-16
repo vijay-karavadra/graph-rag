@@ -25,7 +25,7 @@ class EdgeHelper:
         *,
         use_denormalized_metadata: bool = False,
         denormalized_path_delimiter: str = ".",
-        denormalized_static_value: Any = True,
+        denormalized_static_value: Any = "$",
     ) -> None:
         self.use_denormalized_metadata = use_denormalized_metadata
         self.denormalized_path_delimiter = denormalized_path_delimiter
@@ -52,7 +52,6 @@ class EdgeHelper:
         *,
         warn_non_denormalized: bool = False,
         incoming: bool = False,
-        is_denormalized: bool = False,
     ) -> set[Edge]:
         """Extract edges from the metadata based on declared edges."""
 
@@ -63,7 +62,7 @@ class EdgeHelper:
 
             value = metadata.get(source_key, SENTINEL)
             if isinstance(value, BASIC_TYPES):
-                edges.add(Edge(target_key, value, is_denormalized=is_denormalized))
+                edges.add(Edge(target_key, value))
             elif isinstance(value, Iterable):
                 # Note: `str` and `bytes` are in `BASIC_TYPES` so no need to
                 # guard against.
@@ -72,9 +71,7 @@ class EdgeHelper:
                 else:
                     for item in value:
                         if isinstance(item, BASIC_TYPES):
-                            edges.add(
-                                Edge(target_key, item, is_denormalized=is_denormalized)
-                            )
+                            edges.add(Edge(target_key, item))
                         else:
                             raise ValueError(
                                 f"Unsupported item value {item} in '{source_key}'"
@@ -88,7 +85,11 @@ class EdgeHelper:
     ) -> dict[str, Any]:
         normalized: dict[str, Any] = {}
         for key, value in denormalized_metadata.items():
-            if value != self.denormalized_static_value:
+            try:
+                if value != self.denormalized_static_value:
+                    continue
+            except (TypeError, ValueError):
+                # Skip items that can't be compared
                 continue
 
             split = key.split(self.denormalized_path_delimiter, 2)
@@ -119,6 +120,7 @@ class EdgeHelper:
         self,
         base_filter: dict[str, Any] | None = None,
         edge: Edge | None = None,
+        denormalize_edge: bool = False,
     ) -> dict[str, Any]:
         """Builds a metadata filter to search for documents
 
@@ -129,11 +131,10 @@ class EdgeHelper:
         metadata_filter = {**(base_filter or {})}
         if edge is None:
             metadata_filter
-        elif edge.is_denormalized:
+        elif denormalize_edge:
             metadata_filter[
                 f"{edge.key}{self.denormalized_path_delimiter}{edge.value}"
             ] = self.denormalized_static_value
         else:
             metadata_filter[edge.key] = edge.value
-
         return metadata_filter

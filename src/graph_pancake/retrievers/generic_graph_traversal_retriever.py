@@ -37,7 +37,9 @@ class _TraversalState:
         if isinstance(strategy, TraversalStrategy):
             self.strategy = strategy.model_copy(deep=True)
         elif isinstance(strategy, dict):
-            assert base_strategy is not None, "Must set strategy in init to support field-overrides."
+            assert (
+                base_strategy is not None
+            ), "Must set strategy in init to support field-overrides."
             self.strategy = base_strategy.model_copy(update=strategy, deep=True)
         elif strategy is None:
             assert base_strategy is not None, "Must set strategy in init or invocation."
@@ -180,7 +182,7 @@ class GenericGraphTraversalRetriever(BaseRetriever):
 
     use_denormalized_metadata: bool = Field(default=False)
     denormalized_path_delimiter: str = Field(default=".")
-    denormalized_static_value: Any = Field(default=True)
+    denormalized_static_value: Any = Field(default="$")
 
     extra_args: dict[str, Any] = {}
 
@@ -448,6 +450,21 @@ class GenericGraphTraversalRetriever(BaseRetriever):
                 **kwargs,
             )
             results.extend(docs)
+            if self.use_denormalized_metadata:
+                # If we denormalized the metadata, we actually do two queries.
+                # One, for normalized values (above) and one for denormalized.
+                # This ensures that cases where the key had a single value are
+                # caught as well. This could *maybe* be handled differently if
+                # we know keys that were always denormalized.
+                docs = self.store.similarity_search_with_embedding_by_vector(
+                    embedding=state.strategy.query_embedding,
+                    k=state.strategy.adjacent_k,
+                    filter=self.edge_helper.get_metadata_filter(
+                        base_filter=filter, edge=outgoing_edge, denormalize_edge=True
+                    ),
+                    **kwargs,
+                )
+                results.extend(docs)
         return results
 
     async def _aget_adjacent(
@@ -478,6 +495,27 @@ class GenericGraphTraversalRetriever(BaseRetriever):
             )
             for outgoing_edge in outgoing_edges
         ]
+        if self.use_denormalized_metadata:
+            # If we denormalized the metadata, we actually do two queries.
+            # One, for normalized values (above) and one for denormalized.
+            # This ensures that cases where the key had a single value are
+            # caught as well. This could *maybe* be handled differently if
+            # we know keys that were always denormalized.
+            tasks.extend(
+                [
+                    self.store.asimilarity_search_with_embedding_by_vector(
+                        embedding=state.strategy.query_embedding,
+                        k=state.strategy.adjacent_k,
+                        filter=self.edge_helper.get_metadata_filter(
+                            base_filter=filter,
+                            edge=outgoing_edge,
+                            denormalize_edge=True,
+                        ),
+                        **kwargs,
+                    )
+                    for outgoing_edge in outgoing_edges
+                ]
+            )
 
         results: list[Document] = []
         for completed_task in asyncio.as_completed(tasks):
