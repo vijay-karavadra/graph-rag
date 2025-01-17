@@ -41,16 +41,23 @@ docker-down:
 
 .PHONY: integration
 integration:
-	uv run pytest -v ./tests/integration_tests/
+	@echo "🚀 Testing code: Running pytest ./tests/inegration_tests (in memory only)"
+	@uv run pytest -vs ./tests/integration_tests/
 
 .PHONY: unit
 unit:
-	uv run pytest -vs ./tests/unit_tests/
+	@echo "🚀 Testing code: Running pytest ./tests/unit_tests"
+	@uv run pytest -vs ./tests/unit_tests/
 
 .PHONY: test
 test:
 	@echo "🚀 Testing code: Running pytest"
-	@uv run python -m pytest ./tests/unit_tests ./tests/integration_tests/ --cov --cov-config=pyproject.toml --cov-report=xml --stores=all
+	@uv run python -m pytest -vs ./tests/unit_tests ./tests/integration_tests/ --cov --cov-config=pyproject.toml --cov-report=xml --stores=all
+
+.PHONY: test
+testci:
+	@echo "🚀 Testing code: Running pytest"
+	@uv run python -m pytest -vs ./tests/unit_tests ./tests/integration_tests/ --cov --cov-config=pyproject.toml --cov-report=xml --stores=mem --stores=mem_denorm --stores=cassandra --stores=chroma --stores=opensearch
 
 .PHONY: mypy
 mypy:
