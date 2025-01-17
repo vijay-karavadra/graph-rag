@@ -27,7 +27,7 @@ Retrievers providing both **unstructured** (similarity-search on vectors) and
 <br />
 <div align="center">
   <a href="https://github.com/datastax/graph-rag">
-    <img src="https://github.com/datastax/graph-rag/raw/main/images/logo.jpg" alt="Logo">
+    <img src="https://github.com/datastax/graph-rag/raw/main/images/logo.jpg" alt="Logo" height="160px">
   </a>
 
 <h3 align="center">Graph RAG - Combining Vector and Graph for better RAG</h3>
