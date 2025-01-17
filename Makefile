@@ -20,15 +20,25 @@ fmt:
 fmt-check:
 	uvx $(RUFF) format --check .
 
-.PHONY: check-lock
+.PHONY: check-lock lock
 check-lock:
 	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
 	@uv lock --locked
 
-.PHONY: deptry
-deptry:
-	@echo "🚀 Checking for obsolete dependencies: Running deptry"
-	@uvx $(DEPTRY) packages/langchain-graph-rag/src packages/langchain-graph-rag/tests
+lock:
+	@echo "🚀 Updating lock files"
+	@uv lock
+
+.PHONY: deptry-gr deptry-lgr deptry
+deptry-gr:
+	@echo "🚀 Checking for obsolete dependencies: Running deptry on graph-rag"
+	cd packages/graph-rag && uvx $(DEPTRY) src tests
+
+deptry-lgr:
+	@echo "🚀 Checking for obsolete dependencies: Running deptry on langchain-graph-rag"
+	cd packages/langchain-graph-rag && uvx $(DEPTRY) src tests
+
+deptry: deptry-gr deptry-lgr
 
 .PHONY: docker-up
 docker-up:
