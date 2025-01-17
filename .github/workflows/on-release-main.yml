@@ -62,9 +62,12 @@ jobs:
     needs: [build]
     environment: pypi
     permissions:
-        # contents: read
+        contents: read
         id-token: write
     steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
