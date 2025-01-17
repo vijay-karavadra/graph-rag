@@ -54,10 +54,7 @@ jobs:
             done
 
       - name: List packages
-        run: ls -R
-
-      - name: tree
-        run: tree
+        run: ls -R dist
 
       - name: Upload dist packages
         uses: actions/upload-artifact@v4
@@ -84,12 +81,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
-
-      - name: List packages
-        run: ls -R
-
-      - name: tree
-        run: tree
+          path: dist
 
       - name: Publish package
         run: uv publish
