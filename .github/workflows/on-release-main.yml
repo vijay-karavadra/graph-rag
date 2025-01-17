@@ -26,7 +26,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pyproject-toml
-          path: pyproject.toml packages/*/pyproject.toml
+          path: |
+            pyproject.toml
+            packages/*/pyproject.toml
 
   build:
     runs-on: ubuntu-latest
