@@ -64,8 +64,9 @@ jobs:
     needs: [build]
     environment: pypi
     permissions:
-        contents: read
-        id-token: write
+        actions: read   # for dewnlooading artifacts (actions/download-artifact)
+        contents: read  # for repository contents    (actions/checkout)
+        id-token: write # for pypi environment
     steps:
       - name: Check out
         uses: actions/checkout@v4
