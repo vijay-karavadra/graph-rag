@@ -53,6 +53,9 @@ jobs:
               uv build --package $E
             done
 
+      - name: List packages
+        run: ls dist
+
       - name: Upload dist packages
         uses: actions/upload-artifact@v4
         with:
@@ -64,8 +67,8 @@ jobs:
     needs: [build]
     environment: pypi
     permissions:
-        actions: read   # for dewnlooading artifacts (actions/download-artifact)
-        contents: read  # for repository contents    (actions/checkout)
+        actions: read   # for downloading artifacts (actions/download-artifact)
+        contents: read  # for repository contents   (actions/checkout)
         id-token: write # for pypi environment
     steps:
       - name: Check out
@@ -81,4 +84,5 @@ jobs:
 
       - name: Publish package
         run: |
+            ls dist
             uv publish
