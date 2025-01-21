@@ -110,16 +110,51 @@ class AstraAdapter(Adapter[AstraDBVectorStore]):
         """Get documents by id."""
         docs: list[Document] = []
         for id in ids:
-            doc = self.vector_store.get_by_document_id(id, **kwargs)
+            doc = self._get_by_id_with_embedding(id)
             if doc is not None:
                 docs.append(doc)
         return docs
 
+    def _get_by_id_with_embedding(self, document_id: str) -> Document | None:
+        self.vector_store.astra_env.ensure_db_setup()
+
+        hit = self.vector_store.astra_env.collection.find_one(
+            {"_id": document_id},
+            projection=self.vector_store.document_codec.full_projection,
+        )
+        if hit is None:
+            return None
+        document = self.vector_store.document_codec.decode(hit)
+        if document is None:
+            return None
+        document.metadata[METADATA_EMBEDDING_KEY] = (
+            self.vector_store.document_codec.decode_vector(hit)
+        )
+        return document
+
     async def aget(self, ids: Sequence[str], /, **kwargs: Any) -> list[Document]:
         """Get documents by id."""
         docs: list[Document] = []
+        # TODO: Do this asynchronously?
         for id in ids:
-            doc = await self.vector_store.aget_by_document_id(id, **kwargs)
+            doc = await self._aget_by_id_with_embedding(id)
             if doc is not None:
                 docs.append(doc)
         return docs
+
+    async def _aget_by_id_with_embedding(self, document_id: str) -> Document | None:
+        await self.vector_store.astra_env.aensure_db_setup()
+
+        hit = await self.vector_store.astra_env.async_collection.find_one(
+            {"_id": document_id},
+            projection=self.vector_store.document_codec.full_projection,
+        )
+        if hit is None:
+            return None
+        document = self.vector_store.document_codec.decode(hit)
+        if document is None:
+            return None
+        document.metadata[METADATA_EMBEDDING_KEY] = (
+            self.vector_store.document_codec.decode_vector(hit)
+        )
+        return document

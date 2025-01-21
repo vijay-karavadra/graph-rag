@@ -8,11 +8,11 @@ from langchain_graph_retriever.strategy.mmr import (
     Mmr,
 )
 from tests.embeddings.simple_embeddings import Angular2DEmbeddings
-from tests.integration_tests.assertions import sorted_doc_ids
 from tests.integration_tests.animal_docs import (
     ANIMALS_DEPTH_0_EXPECTED,
     ANIMALS_QUERY,
 )
+from tests.integration_tests.assertions import sorted_doc_ids
 from tests.integration_tests.stores import Adapter
 
 
