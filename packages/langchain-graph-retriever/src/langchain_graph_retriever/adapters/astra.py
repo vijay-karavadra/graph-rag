@@ -127,7 +127,9 @@ class AstraAdapter(Adapter[AstraDBVectorStore]):
         document = self.vector_store.document_codec.decode(hit)
         if document is None:
             return None
-        document[METADATA_EMBEDDING_KEY] = self.vector_store.document_codec.decode_vector(hit)
+        document.metadata[METADATA_EMBEDDING_KEY] = (
+            self.vector_store.document_codec.decode_vector(hit)
+        )
         return document
 
     async def aget(self, ids: Sequence[str], /, **kwargs: Any) -> list[Document]:
@@ -152,5 +154,7 @@ class AstraAdapter(Adapter[AstraDBVectorStore]):
         document = self.vector_store.document_codec.decode(hit)
         if document is None:
             return None
-        document[METADATA_EMBEDDING_KEY] = self.vector_store.document_codec.decode_vector(hit)
+        document.metadata[METADATA_EMBEDDING_KEY] = (
+            self.vector_store.document_codec.decode_vector(hit)
+        )
         return document

@@ -11,10 +11,10 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import computed_field
 
+from .adapters.base import METADATA_EMBEDDING_KEY, Adapter
 from .edge import Edge
 from .edge_helper import EdgeHelper
 from .node import Node
-from .adapters.base import METADATA_EMBEDDING_KEY, Adapter
 from .strategy.base import Strategy
 
 INFINITY = float("inf")
