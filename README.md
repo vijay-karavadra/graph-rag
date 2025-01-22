@@ -84,7 +84,7 @@ The core library (`graph-retriever`) supports can be used in generic Python appl
 
     ```python
     from langchain_graph_retriever import GraphTraversalRetriever
-    from langchain_graph_retriever.strategy.mmr import Mmr
+    from langchain_graph_retriever.strategy import Mmr
     from langchain_graph_retriever.adapters.astra import AstraAdapter
 
     retriever = GraphTraversalRetriever(

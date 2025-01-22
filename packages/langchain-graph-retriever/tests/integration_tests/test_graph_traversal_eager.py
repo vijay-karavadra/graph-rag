@@ -3,7 +3,7 @@ from langchain_core.documents import Document
 from langchain_graph_retriever import (
     GraphTraversalRetriever,
 )
-from langchain_graph_retriever.strategy.eager import (
+from langchain_graph_retriever.strategies import (
     Eager,
 )
 from tests.embeddings.simple_embeddings import EarthEmbeddings, ParserEmbeddings

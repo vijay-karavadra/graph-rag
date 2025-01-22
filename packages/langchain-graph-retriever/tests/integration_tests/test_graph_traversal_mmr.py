@@ -4,7 +4,7 @@ from langchain_graph_retriever import GraphTraversalRetriever
 from langchain_graph_retriever.adapters.in_memory import (
     InMemoryAdapter,
 )
-from langchain_graph_retriever.strategy.mmr import (
+from langchain_graph_retriever.strategies import (
     Mmr,
 )
 from tests.embeddings.simple_embeddings import Angular2DEmbeddings
