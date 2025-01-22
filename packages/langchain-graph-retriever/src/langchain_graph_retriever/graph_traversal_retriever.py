@@ -17,7 +17,7 @@ from pydantic import computed_field
 from .adapters.base import METADATA_EMBEDDING_KEY, Adapter
 from .edge_helper import Edge, EdgeHelper
 from .node import Node
-from .strategy.base import Strategy
+from .strategies.base import Strategy
 
 INFINITY = float("inf")
 

@@ -60,12 +60,12 @@ quartodoc:
       - GraphTraversalRetriever
     - title: Retrieval Strategies
       desc: Strategies for use with the retrieval.
-      package: langchain_graph_retriever.strategy
+      package: langchain_graph_retriever.strategies
       contents:
       - Strategy
-      - eager.Eager
-      - mmr.Mmr
-      - scored.Scored
+      - Eager
+      - Mmr
+      - Scored
     - title: Adapters
       desc: Adapters for LangChain `VectorStore`s supporting Graph traversal.
       package: langchain_graph_retriever.adapters
