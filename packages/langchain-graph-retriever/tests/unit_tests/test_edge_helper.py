@@ -58,11 +58,11 @@ def test_get_incoming_outgoing_unsupported_values():
     )
 
     # Unsupported value
-    with pytest.raises(ValueError, match=r"Unsupported value .* in 'href'"):
+    with pytest.warns(UserWarning, match=r"Unsupported value .* in 'href'"):
         edge_helper.get_incoming_outgoing({"href": None})
 
     # Unsupported item value
-    with pytest.raises(ValueError, match=r"Unsupported item value .* in 'href'"):
+    with pytest.warns(UserWarning, match=r"Unsupported item value .* in 'href'"):
         edge_helper.get_incoming_outgoing({"href": [None]})
 
     edge_helper = EdgeHelper(
@@ -73,7 +73,7 @@ def test_get_incoming_outgoing_unsupported_values():
         denormalized_static_value=57,
     )
     # Unsupported value
-    with pytest.raises(ValueError, match=r"Unsupported value .* in 'href'"):
+    with pytest.warns(UserWarning, match=r"Unsupported value .* in 'href'"):
         edge_helper.get_incoming_outgoing({"href": None})
 
     # It is OK for the list to exist in the metadata, although we do issue a warning
