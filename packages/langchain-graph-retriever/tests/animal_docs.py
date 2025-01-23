@@ -22,7 +22,6 @@ def animal_docs() -> list[Document]:
                     metadata=data["metadata"],
                 )
             )
-
     return documents
 
 

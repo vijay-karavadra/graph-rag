@@ -29,30 +29,14 @@ class _TraversalState:
         self,
         *,
         edge_helper: EdgeHelper,
-        base_strategy: Strategy | None,
-        strategy: Strategy | dict[str, Any] | None,
+        strategy: Strategy,
     ) -> None:
         self.edge_helper = edge_helper
-
-        # Deep copy in case the strategy has mutable state
-        if isinstance(strategy, Strategy):
-            self.strategy = strategy.model_copy(deep=True)
-        elif isinstance(strategy, dict):
-            assert (
-                base_strategy is not None
-            ), "Must set strategy in init to support field-overrides."
-            self.strategy = base_strategy.model_copy(update=strategy, deep=True)
-        elif strategy is None:
-            assert base_strategy is not None, "Must set strategy in init or invocation."
-            self.strategy = base_strategy.model_copy(deep=True)
-        else:
-            raise ValueError(f"Unsupported strategy {strategy}")
-
+        self.strategy = strategy
         self.visited_edges: set[Edge] = set()
         self.edge_depths: dict[Edge, int] = {}
         self.doc_cache: dict[str, Document] = {}
         self.node_cache: dict[str, Node] = {}
-
         self.selected_nodes: dict[str, Node] = {}
 
     def _doc_to_new_node(
@@ -185,7 +169,7 @@ class GraphRetriever(BaseRetriever):
     store: Adapter
     edges: List[Union[str, Tuple[str, str]]]
     strategy: Strategy | None = None
-    extra_args: dict[str, Any] = {}
+    k: int | None = None
 
     @computed_field  # type: ignore
     @cached_property
@@ -202,7 +186,6 @@ class GraphRetriever(BaseRetriever):
         self,
         query: str,
         *,
-        strategy: Strategy | dict[str, Any] | None = None,
         initial_roots: Sequence[str] = (),
         filter: dict[str, Any] | None = None,
         store_kwargs: dict[str, Any] = {},
@@ -230,9 +213,10 @@ class GraphRetriever(BaseRetriever):
 
         """
         state = _TraversalState(
-            base_strategy=self.strategy,
-            strategy=strategy,
             edge_helper=self.edge_helper,
+            strategy=Strategy.build(
+                base_strategy=self.strategy, base_k=self.k, **kwargs
+            ),
         )
 
         # Retrieve initial candidates.
@@ -272,7 +256,6 @@ class GraphRetriever(BaseRetriever):
         self,
         query: str,
         *,
-        strategy: Strategy | dict[str, Any] | None = None,
         initial_roots: Sequence[str] = (),
         filter: dict[str, Any] | None = None,
         store_kwargs: dict[str, Any] = {},
@@ -289,7 +272,6 @@ class GraphRetriever(BaseRetriever):
 
         Args:
             query: The query string to search for.
-            strategy: Specify or override the strategy to use for this retrieval.
             initial_roots: Optional list of document IDs to use for initializing search.
                 The top `adjacent_k` nodes adjacent to each initial root will be
                 included in the set of initial candidates. To fetch only in the
@@ -301,8 +283,9 @@ class GraphRetriever(BaseRetriever):
         """
         state = _TraversalState(
             edge_helper=self.edge_helper,
-            base_strategy=self.strategy,
-            strategy=strategy,
+            strategy=Strategy.build(
+                base_strategy=self.strategy, base_k=self.k, **kwargs
+            ),
         )
 
         # Retrieve initial candidates and initialize state.
