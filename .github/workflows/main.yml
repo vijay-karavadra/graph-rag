@@ -116,8 +116,16 @@ jobs:
       - name: Set up Quarto
         uses: quarto-dev/quarto-actions/setup@v2
 
+      - name: Sync Docs Dependencies
+        run: uv sync --group=docs
+
       - name: Check if documentation can be built
         run: make docs-build
+        id: build
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ASTRA_DB_APPLICATION_TOKEN: ${{ secrets.ASTRA_DB_APPLICATION_TOKEN }}
+          ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
 
       - name: Upload docs
         uses: actions/upload-pages-artifact@v2
