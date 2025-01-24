@@ -27,23 +27,23 @@ jobs:
         uses: ./.github/actions/setup-python-env
         id: setup
 
-      - name: Run `make fmt-check`
-        run: make fmt-check
+      - name: Run `fmt-check`
+        run: uv run poe fmt-check
         # Runs this as long as setup succeeds.
         if: ${{ !cancelled() && steps.setup.conclusion == 'success' }}
 
-      - name: Run `make check`
-        run: make check
+      - name: Run `lint-check`
+        run: uv run poe lint-check
         # Runs this as long as setup succeeds.
         if: ${{ !cancelled() && steps.setup.conclusion == 'success' }}
 
-      - name: Run `make check-lock`
-        run: make check-lock
+      - name: Run `lock-check`
+        run: uv run poe lock-check
         # Runs this as long as setup succeeds.
         if: ${{ !cancelled() && steps.setup.conclusion == 'success' }}
 
-      - name: Run `make deptry`
-        run: make deptry
+      - name: Run `dep-check`
+        run: uv run poe dep-check
         # Runs this as long as setup succeeds.
         if: ${{ !cancelled() && steps.setup.conclusion == 'success' }}
 
@@ -69,8 +69,7 @@ jobs:
         if: ${{ success() && matrix.python-version == '3.12' }}
         id: test
         run:
-            cd packages/langchain-graph-retriever && uv run pytest -vs .
-                --stores=all
+            uv run poe test-all
                 --junitxml=junit/test-results-${{ matrix.python-version }}.xml
         env:
           ASTRA_DB_APPLICATION_TOKEN: ${{ secrets.ASTRA_DB_APPLICATION_TOKEN }}
@@ -91,11 +90,11 @@ jobs:
       - name: Test In-Memory Stores (non-3.12)
         if: ${{ success() && matrix.python-version != '3.12' }}
         run:
-            cd packages/langchain-graph-retriever && uv run pytest -vs .
+            uv run poe test
                 --junitxml=junit/test-results-${{ matrix.python-version }}.xml
 
-      - name: Run `make mypy`
-        run: make mypy
+      - name: Run `type-check`
+        run: uv run poe type-check
 
       - name: Upload test results
         if: ${{ always() }}
@@ -120,7 +119,7 @@ jobs:
         run: uv sync --group=docs
 
       - name: Check if documentation can be built
-        run: make docs-build
+        run: uv run poe docs-build
         id: build
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

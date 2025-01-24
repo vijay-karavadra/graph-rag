@@ -4,8 +4,7 @@ version = "0.1.0"
 description = "uv workspace for Graph RAG projects"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-]
+dependencies = []
 
 classifiers = ["Private :: Do Not Upload"]
 
@@ -39,6 +38,7 @@ dev = [
     "pytest>=8.3.4",
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.25.2",
+    "poethepoet>=0.32.1",
 ]
 
 docs = [
@@ -62,3 +62,113 @@ source = [
     "packages/graph-retriever/src/graph_retriever",
     "packages/langchain-graph-retriever/src/langchain_graph_retriever",
     ]
+
+[tool.poe]
+# comment this out to debug poe tasks
+verbosity = -1
+
+[tool.poe.env]
+RUFF = "ruff@0.8.6"
+DEPTRY = "deptry@0.22.0"
+
+[tool.poe.tasks.install]
+help = "Install dependencies from all packages and all extras"
+cmd = "uv sync --all-packages --all-extras"
+
+[tool.poe.tasks.lock-check]
+help = "Runs `uv lock --locked` to check uv.lock file consistency (fix with `lock-fix`)"
+cmd = "uv lock --locked"
+
+[tool.poe.tasks.lock-fix]
+help = "Runs `uv lock` to fix uv.lock file consistency"
+cmd = "uv lock"
+
+[tool.poe.tasks.fmt-check]
+help = "Runs `ruff format --check` to check for formatting issues (fix with `fmt-fix`)"
+cmd = "uvx ${RUFF} format --check ."
+
+[tool.poe.tasks.fmt-fix]
+help = "Runs `ruff format` to fix formatting issues"
+cmd = "uvx ${RUFF} format ."
+
+[tool.poe.tasks.lint-check]
+help = "Runs `ruff check` to check for lint issues (fix with `lint-fix`)"
+cmd = "uvx ${RUFF} check ."
+
+[tool.poe.tasks.lint-fix]
+help = "Runs `ruff check --fix` to fix lint issues"
+cmd = "uvx ${RUFF} check --fix ."
+
+[tool.poe.tasks.type-check]
+help = "Runs `mypy` to check for static type issues"
+cwd = "packages/langchain-graph-retriever"
+sequence = [
+    {cmd = "uv run mypy .", cwd = "packages/graph-retriever"},
+    {cmd = "uv run mypy .", cwd = "packages/langchain-graph-retriever"},
+]
+
+[tool.poe.tasks.dep-check]
+help = "Runs `deptry` to check for dependency issues"
+sequence = [
+    {cmd = "uvx ${DEPTRY} src tests", cwd = "packages/graph-retriever"},
+    {cmd = "uvx ${DEPTRY} src tests", cwd = "packages/langchain-graph-retriever"},
+]
+
+[tool.poe.tasks.lint]
+help = "Runs all formatting, lints, and checks (fixing where possible)"
+sequence = [ "lock-fix", "fmt-fix", "lint-fix", "type-check", "dep-check"]
+
+[tool.poe.tasks.integration]
+help = "Runs integration tests (against in-memory stores)"
+cwd = "packages/langchain-graph-retriever"
+args = [{ name = "path", positional = true, default = "tests/integration_tests"}]
+cmd = "uv run pytest -vs $path"
+
+[tool.poe.tasks.unit]
+help = "Runs unit tests"
+cwd = "packages/langchain-graph-retriever"
+args = [{ name = "path", positional = true, default = "tests/unit_tests"}]
+cmd = "uv run pytest -vs $path"
+
+[tool.poe.tasks.test]
+help = "Runs all tests (against in-memory stores)"
+cwd = "packages/langchain-graph-retriever"
+cmd = "uv run pytest -vs ."
+
+[tool.poe.tasks.test-all]
+help = "Runs all tests (against all stores)"
+cwd = "packages/langchain-graph-retriever"
+cmd = "uv run pytest -vs . --stores=all"
+
+[tool.poe.tasks.build]
+help = "Builds all the packages"
+sequence = [
+    "install",
+    {cmd = "uv build --package graph-retriever"},
+    {cmd = "uv build --package langchain-graph-retriever"},
+]
+
+[tool.poe.tasks.docs-api]
+help = "Updates the package installation and generates the API docs"
+sequence = [
+    {cmd = "uv pip install packages/* --force-reinstall"},
+    {cmd = "uv run quartodoc build", cwd="docs"},
+]
+
+[tool.poe.tasks.docs-preview]
+help = "Starts a live preview of the docs site"
+sequence = [
+    "docs-api",
+    {cmd = "uv run quarto preview", cwd="docs"},
+]
+
+[tool.poe.tasks.docs-build]
+help = "Builds the docs site in `_site`"
+sequence = [
+    "docs-api",
+    {cmd = "uv run quarto render", cwd="docs"},
+]
+
+[tool.poe.tasks.help]
+help = "Shows this help"
+cmd = "uv run poe --help"
