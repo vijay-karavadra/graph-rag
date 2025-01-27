@@ -13,81 +13,34 @@ SENTINEL = object()
 
 class InMemoryAdapter(Adapter[InMemoryVectorStore]):
     """
-    Adapter for InMemoryVectorStore.
+    Adapter for InMemoryVectorStore vector store.
 
-    This adapter integrates the in-memory vector store with the graph retriever system,
-    enabling similarity search and document retrieval.
+    This adapter integrates the in-memory vector store with the graph
+    retriever system, enabling similarity search and document retrieval.
 
     Parameters
     ----------
     vector_store : InMemoryVectorStore
         The in-memory vector store instance.
-    use_normalized_metadata : bool, default False
-        Indicates whether normalized metadata is used.
-    denormalized_path_delimiter : str, default "."
-        Delimiter for denormalized metadata keys.
-    denormalized_static_value : str, default "$"
-        Value to use for denormalized metadata entries.
     """
-
-    def __init__(
-        self,
-        vector_store: InMemoryVectorStore,
-        *,
-        use_normalized_metadata: bool = False,
-        denormalized_path_delimiter: str = ".",
-        denormalized_static_value: str = "$",
-    ):
-        super().__init__(
-            vector_store,
-            use_normalized_metadata=use_normalized_metadata,
-            denormalized_path_delimiter=denormalized_path_delimiter,
-            denormalized_static_value=denormalized_static_value,
-        )
 
     @override
     def get(self, ids: Sequence[str], /, **kwargs) -> list[Document]:
-        docs = self.vector_store.get_by_ids(ids)
-        # NOTE: Assumes embedding is deterministic.
-        embeddings = self._safe_embedding.embed_documents(
-            [doc.page_content for doc in docs]
-        )
-        return self._add_embeddings(docs, embeddings)
+        docs: list[Document] = []
 
-    def _add_embeddings(
-        self, docs: Sequence[Document], embeddings: list[list[float]]
-    ) -> list[Document]:
-        """
-        Add embeddings to the metadata of documents.
-
-        Parameters
-        ----------
-        docs : Sequence[Document]
-            List of documents.
-        embeddings : list[list[float]])
-            Corresponding embeddings.
-
-        Returns
-        -------
-        list[Document]
-            Documents with updated metadata containing embeddings.
-        """
-        return [
-            Document(
-                id=doc.id,
-                page_content=doc.page_content,
-                metadata={METADATA_EMBEDDING_KEY: emb, **doc.metadata},
-            )
-            for doc, emb in zip(docs, embeddings)
-        ]
-
-    @override
-    async def aget(self, ids: Sequence[str], /, **kwargs) -> list[Document]:
-        docs = await self.vector_store.aget_by_ids(ids)
-        embeddings = await self._safe_embedding.aembed_documents(
-            [doc.page_content for doc in docs]
-        )
-        return self._add_embeddings(docs, embeddings)
+        for doc_id in ids:
+            doc = self.vector_store.store.get(doc_id)
+            if doc:
+                metadata = doc["metadata"]
+                metadata[METADATA_EMBEDDING_KEY] = doc["vector"]
+                docs.append(
+                    Document(
+                        id=doc["id"],
+                        page_content=doc["text"],
+                        metadata=metadata,
+                    )
+                )
+        return docs
 
     @override
     def similarity_search_with_embedding_by_vector(
@@ -100,16 +53,18 @@ class InMemoryAdapter(Adapter[InMemoryVectorStore]):
         results = self.vector_store._similarity_search_with_score_by_vector(
             embedding=embedding,
             k=k,
-            filter=self._filter_method(filter),
+            filter=self._filter_method(filter_dict=filter),
+            **kwargs,
         )
-        return [
+        docs = [
             Document(
                 id=doc.id,
                 page_content=doc.page_content,
-                metadata={METADATA_EMBEDDING_KEY: embedding, **doc.metadata},
+                metadata={METADATA_EMBEDDING_KEY: doc_embedding, **doc.metadata},
             )
-            for doc, _score, embedding in results
+            for doc, _score, doc_embedding in results
         ]
+        return docs
 
     def _equals_or_contains(
         self,
@@ -140,8 +95,7 @@ class InMemoryAdapter(Adapter[InMemoryVectorStore]):
             return True
 
         if (
-            self.use_normalized_metadata
-            and isinstance(actual, Iterable)
+            isinstance(actual, Iterable)
             and not isinstance(actual, str | bytes)
             and value in actual
         ):
