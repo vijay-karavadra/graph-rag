@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Iterable
 from typing import Any
 
-from langchain_graph_retriever.types import Edge, Edges, MetadataEdge, Node
+from langchain_graph_retriever.types import Edge, Edges, IdEdge, MetadataEdge, Node
 
 BASIC_TYPES = (str, bool, int, float, complex, bytes)
 
@@ -12,6 +12,12 @@ BASIC_TYPES = (str, bool, int, float, complex, bytes)
 # between present but `None` (returns `None`) and absent (returns `SENTINEL`)
 # elements.
 SENTINEL = object()
+
+
+class Id:
+    """Place-holder type indicating that the ID should be used."""
+
+    pass
 
 
 class MetadataEdgeFunction:
@@ -24,16 +30,18 @@ class MetadataEdgeFunction:
 
     Parameters
     ----------
-        edges : list[tuple[str, str]]
+        edges : list[tuple[str, str | Id]]
             Definitions of edges for traversal, represented
-            as pairs of incoming and outgoing keys.
-            - If a string, the same key is used for both incoming and outgoing.
-            - If a tuple, the first element is the outgoing key, and the second is
-                the incoming key.
+            as pairs of source and target keys.
+            - If a string, the same key is used for both source and target.
+            - If a tuple, the first element is the source key, and the second is
+                the target key.
+            - Using `Id()` as the target creates a link from a metadata field
+              to the node id (not metadata).
 
     Attributes
     ----------
-        edges : list[tuple[str, str]]
+        edges : list[tuple[str, str | Id]]
             Definitions of edges for traversal, represented
             as pairs of incoming and outgoing keys.
             - If a string, the same key is used for both incoming and outgoing.
@@ -42,21 +50,23 @@ class MetadataEdgeFunction:
 
     Raises
     ------
-        ValueError: If an invalid edge definition is provided.
+    ValueError
+        If an invalid edge definition is provided.
     """
 
     def __init__(
         self,
-        edges: list[str | tuple[str, str]],
+        edges: list[str | tuple[str, str | Id]],
     ) -> None:
-        self.edges = []
+        self.edges: list[tuple[str, str | Id]] = []
         for edge in edges:
             if isinstance(edge, str):
                 self.edges.append((edge, edge))
             elif (
                 isinstance(edge, tuple)
                 and len(edge) == 2
-                and all(isinstance(item, str) for item in edge)
+                and isinstance(edge[0], str)
+                and isinstance(edge[1], str | Id)
             ):
                 self.edges.append((edge[0], edge[1]))
             else:
@@ -66,6 +76,7 @@ class MetadataEdgeFunction:
 
     def _edges_from_dict(
         self,
+        id: str,
         metadata: dict[str, Any],
         *,
         incoming: bool = False,
@@ -93,15 +104,28 @@ class MetadataEdgeFunction:
         edges: set[Edge] = set()
         for source_key, target_key in self.edges:
             if incoming:
-                source_key = target_key
+                if isinstance(target_key, Id):
+                    edges.add(IdEdge(id=id))
+                    continue
+                else:
+                    source_key = target_key
+
+            if isinstance(target_key, Id):
+
+                def mk_edge(v) -> Edge:
+                    return IdEdge(id=str(v))
+            else:
+
+                def mk_edge(v) -> Edge:
+                    return MetadataEdge(incoming_field=target_key, value=v)
 
             value = metadata.get(source_key, SENTINEL)
             if isinstance(value, BASIC_TYPES):
-                edges.add(MetadataEdge(incoming_field=target_key, value=value))
+                edges.add(mk_edge(value))
             elif isinstance(value, Iterable):
                 for item in value:
                     if isinstance(item, BASIC_TYPES):
-                        edges.add(MetadataEdge(incoming_field=target_key, value=item))
+                        edges.add(mk_edge(item))
                     else:
                         warnings.warn(
                             f"Unsupported item value {item} in '{source_key}'"
@@ -127,7 +151,7 @@ class MetadataEdgeFunction:
         Edges
             specyfing the incoming and outgoing edges of the node
         """
-        outgoing_edges = self._edges_from_dict(node.metadata)
-        incoming_edges = self._edges_from_dict(node.metadata, incoming=True)
+        outgoing_edges = self._edges_from_dict(node.id, node.metadata)
+        incoming_edges = self._edges_from_dict(node.id, node.metadata, incoming=True)
 
         return Edges(incoming=incoming_edges, outgoing=outgoing_edges)
