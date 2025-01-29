@@ -39,8 +39,8 @@ def wikipedia_lines(para_with_hyperlink_zip_path: str) -> Iterable[bytes]:
             yield from para_with_hyperlink
 
 
-BATCH_SIZE = 1000
-MAX_IN_FLIGHT = 5
+BATCH_SIZE = 512
+MAX_IN_FLIGHT = 1
 
 EXCEPTIONS_TO_RETRY = (
     httpx.TransportError,
@@ -90,12 +90,22 @@ async def aload_2wikimultihop(
         max_tries=MAX_RETRIES,
     )
     async def add_docs(batch_docs, offset) -> None:
-        await store.aadd_documents(batch_docs)
-        persistence.ack(offset)
+        from astrapy.exceptions import InsertManyException
+
+        try:
+            await store.aadd_documents(batch_docs)
+            persistence.ack(offset)
+        except InsertManyException as err:
+            for err_desc in err.error_descriptors:
+                if err_desc.error_code != "DOCUMENT_ALREADY_EXISTS":
+                    print(err_desc)  # noqa: T201
+            raise
 
     for offset, batch_lines in tqdm(persistence, total=total_batches):
         batch_docs = batch_prepare(batch_lines)
         if batch_docs:
+            ids = [doc.id for doc in batch_docs]
+            assert len(set(ids)) == len(ids)
             task = asyncio.create_task(add_docs(batch_docs, offset))
 
             # It is OK if tasks are lost upon failure since that means we're
@@ -103,11 +113,26 @@ async def aload_2wikimultihop(
             tasks.append(task)
 
             while len(tasks) >= MAX_IN_FLIGHT:
-                _, pending = await asyncio.wait(
+                completed, pending = await asyncio.wait(
                     tasks, return_when=asyncio.FIRST_COMPLETED
                 )
+                for complete in completed:
+                    if (e := complete.exception()) is not None:
+                        print(f"Exception in task: {e}")  # noqa: T201
                 tasks = list(pending)
         else:
             persistence.ack(offset)
 
+    # Make sure all the tasks are done.
+    # This wouldn't be necessary if we used a taskgroup, but that is Python 3.11+.
+    while len(tasks) > 0:
+        completed, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        for complete in completed:
+            if (e := complete.exception()) is not None:
+                print(f"Exception in task: {e}")  # noqa: T201
+        tasks = list(pending)
+
+    assert len(tasks) == 0
     assert persistence.pending_count() == 0
