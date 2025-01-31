@@ -1,15 +1,13 @@
 import pytest
+from graph_retriever import Edges, Id, MetadataEdge
+from graph_retriever.content import Content
+from graph_retriever.strategies import Eager
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_graph_retriever import (
     GraphRetriever,
 )
 from langchain_graph_retriever.adapters.in_memory import InMemoryAdapter
-from langchain_graph_retriever.edges.metadata import Id
-from langchain_graph_retriever.strategies import (
-    Eager,
-)
-from langchain_graph_retriever.types import Edges, MetadataEdge, Node
 
 from tests.animal_docs import (
     ANIMALS_DEPTH_0_EXPECTED,
@@ -386,7 +384,7 @@ async def test_edge_function(invoker) -> None:
     store = InMemoryVectorStore(embedding=Angular2DEmbeddings())
     store.add_documents([v0, v1])
 
-    def link_function(node: Node) -> Edges:
+    def link_function(node: Content) -> Edges:
         links = node.metadata.get("links", [])
         incoming = node.metadata.get("incoming", [])
         return Edges(

@@ -4,10 +4,10 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 import networkx as nx
+from graph_retriever import Edge, EdgeFunction
+from graph_retriever.content import Content
+from graph_retriever.edges.metadata import EdgeSpec, MetadataEdgeFunction
 from langchain_core.documents import Document
-
-from langchain_graph_retriever.edges.metadata import EdgeSpec, MetadataEdgeFunction
-from langchain_graph_retriever.types import Edge, EdgeFunction, Node
 
 
 def _best_communities(graph: nx.DiGraph) -> list[list[str]]:
@@ -127,9 +127,9 @@ def create_graph(
         graph.add_node(document.id, doc=document)
 
         document_edges = edge_function(
-            Node(
+            Content(
                 id=document.id,
-                depth=0,
+                content=document.page_content,
                 embedding=[],
                 metadata=document.metadata,
             )

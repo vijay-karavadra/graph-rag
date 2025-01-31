@@ -6,18 +6,16 @@ from typing import (
     Any,
 )
 
+from graph_retriever import Adapter, EdgeFunction, EdgeSpec, atraverse, traverse
+from graph_retriever.strategies import Eager, Strategy
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 from pydantic import ConfigDict, computed_field, model_validator
 from typing_extensions import Self
 
-from langchain_graph_retriever._traversal import Traversal
-from langchain_graph_retriever.adapters.base import Adapter
+from langchain_graph_retriever._conversion import node_to_doc
 from langchain_graph_retriever.adapters.inference import infer_adapter
-from langchain_graph_retriever.edges.metadata import EdgeSpec
-from langchain_graph_retriever.strategies import Eager, Strategy
-from langchain_graph_retriever.types import EdgeFunction
 
 
 # this class uses pydantic, so store must be provided at init time.
@@ -134,7 +132,7 @@ class GraphRetriever(BaseRetriever):
         if edges is None:
             raise ValueError("'edges' must be provided in this call or the constructor")
 
-        traversal = Traversal(
+        nodes = traverse(
             query=query,
             edges=edges,
             strategy=Strategy.build(base_strategy=self.strategy, **kwargs),
@@ -143,8 +141,7 @@ class GraphRetriever(BaseRetriever):
             initial_root_ids=initial_roots,
             store_kwargs=store_kwargs,
         )
-
-        return traversal.traverse()
+        return [node_to_doc(n) for n in nodes]
 
     async def _aget_relevant_documents(
         self,
@@ -191,7 +188,7 @@ class GraphRetriever(BaseRetriever):
         edges = edges or self.edges
         if edges is None:
             raise ValueError("'edges' must be provided in this call or the constructor")
-        traversal = Traversal(
+        nodes = await atraverse(
             query=query,
             edges=edges,
             strategy=Strategy.build(base_strategy=self.strategy, **kwargs),
@@ -200,5 +197,4 @@ class GraphRetriever(BaseRetriever):
             initial_root_ids=initial_roots,
             store_kwargs=store_kwargs,
         )
-
-        return await traversal.atraverse()
+        return [node_to_doc(n) for n in nodes]
