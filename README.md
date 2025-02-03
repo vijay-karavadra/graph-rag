@@ -36,7 +36,7 @@ Retrievers providing both **unstructured** (similarity-search on vectors) and
   <p align="center">
     Library providing Graph RAG combining vector search and traversal of metadata relationships.
     <br />
-    <a href="https://github.com/datastax/graph-rag"><strong>Explore the docs »</strong></a> -->
+    <a href="https://datastax.github.io/graph-rag"><strong>Explore the docs »</strong></a> -->
     <br />
     <br />
     <a href="https://github.com/datastax/graph-rag/issues">Report Bug</a>
