@@ -1,9 +1,0 @@
----
-title: API Reference
----
-
-Welcome to the Graph-RAG Python API reference. This is a reference for all graph-rag packages.
-
-* [graph_retriever](graph_retriever/index.qmd) - Base package providing traversal functionality.
-* [langchain_graph_retriever](langchain_graph_retriever/index.qmd) - Traversal functionality integrated as a LangChain retriever supporting a variety of LangChain `VectorStore`s.
-* [graph_rag_example_helpers](graph_rag_example_helpers/index.qmd) - Helpers used in various examples and notebooks.
