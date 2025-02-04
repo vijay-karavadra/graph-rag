@@ -8,6 +8,7 @@ from typing import Any
 from graph_retriever.content import Content
 from graph_retriever.types import Edge, IdEdge, MetadataEdge
 from graph_retriever.utils.run_in_executor import run_in_executor
+from graph_retriever.utils.top_k import top_k
 
 
 class Adapter(abc.ABC):
@@ -290,7 +291,12 @@ class Adapter(abc.ABC):
 
         if ids:
             results.extend(self.get(ids, filter=filter))
-        return results
+
+        return top_k(
+            results,
+            embedding=query_embedding,
+            k=k,
+        )
 
     async def aget_adjacent(
         self,
@@ -346,11 +352,17 @@ class Adapter(abc.ABC):
         if ids:
             tasks.append(self.aget(ids, filter))
 
-        results: list[Content] = []
-        for completed_task in asyncio.as_completed(tasks):
-            docs = await completed_task
-            results.extend(docs)
-        return results
+        results: list[Content] = [
+            c
+            for completed_task in asyncio.as_completed(tasks)
+            for c in await completed_task
+        ]
+
+        return top_k(
+            results,
+            embedding=query_embedding,
+            k=k,
+        )
 
     def _get_metadata_filter(
         self,
