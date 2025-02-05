@@ -166,7 +166,7 @@ jobs:
         run: uv sync --all-packages --group=docs --all-extras
 
       - name: Check if documentation can be built
-        run: uv run mkdocs build
+        run: uv run mkdocs build --strict
         id: build
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -187,6 +187,11 @@ jobs:
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
+
+      # mkdocstrings uses `ruff` to format generated signatures.
+      # It doesn't find the version installed by `uv`
+      - name: Install ruff
+        uses: astral-sh/ruff-action@v3
 
       - name: Sync Docs Dependencies
         run: uv sync --all-packages --group=docs --all-extras
