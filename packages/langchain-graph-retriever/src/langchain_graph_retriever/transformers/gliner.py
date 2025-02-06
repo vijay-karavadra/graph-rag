@@ -55,15 +55,15 @@ class GLiNERTransformer(BaseDocumentTransformer):
 
     Parameters
     ----------
-    labels : list[str]
+    labels :
         List of entity kinds to extract.
-    batch_size : int, default 8
+    batch_size :
         The number of documents to process in each batch.
-    metadata_key_prefix : str, default ""
+    metadata_key_prefix :
         A prefix to add to metadata keys outputted by the extractor.
         This will be prepended to the label, with the value (or values) holding the
         generated keywords for that entity kind.
-    model : str | GLiNER, default "urchade/gliner_mediumv2.1"
+    model : str
         The GLiNER model to use. Pass the name of the model to load
         or pass an instantiated GLiNER model instance.
 

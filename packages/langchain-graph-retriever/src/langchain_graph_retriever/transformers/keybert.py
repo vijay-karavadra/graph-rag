@@ -59,11 +59,11 @@ class KeyBERTTransformer(BaseDocumentTransformer):
 
     Parameters
     ----------
-    batch_size : int, default 8
+    batch_size
         The number of documents to process in each batch.
-    metadata_key : str, default "keywords"
+    metadata_key :
         The name of the key used in the metadata output.
-    model : str, default "all-MiniLM-L6-v2"
+    model :
         The KeyBERT model to use.
     """  # noqa: E501
 
