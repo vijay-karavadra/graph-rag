@@ -23,10 +23,6 @@ class Adapter(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def embed_query(self, query: str) -> list[float]:
-        """Return the embedding of the query."""
-        ...
-
     def search_with_embedding(
         self,
         query: str,
@@ -57,14 +53,7 @@ class Adapter(abc.ABC):
         contents :
             List of up to `k` content items most similar to the query vector.
         """
-        query_embedding = self.embed_query(query)
-        docs = self.search(
-            embedding=query_embedding,
-            k=k,
-            filter=filter,
-            **kwargs,
-        )
-        return query_embedding, docs
+        ...
 
     async def asearch_with_embedding(
         self,
