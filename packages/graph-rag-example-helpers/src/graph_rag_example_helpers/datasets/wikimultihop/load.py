@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import os.path
 import zipfile
 from collections.abc import Callable, Iterable, Iterator
@@ -8,6 +9,7 @@ import astrapy
 import astrapy.exceptions
 import backoff
 import httpx
+import requests
 from graph_retriever.utils.batched import batched
 from langchain_core.documents import Document
 from langchain_core.vectorstores.base import VectorStore
@@ -52,16 +54,26 @@ MAX_RETRIES = 8
 BatchPreparer = Callable[[Iterator[bytes]], Iterator[Document]]
 """Function to apply to batches of lines to produce the document."""
 
+SHORT_URL = "https://raw.githubusercontent.com/datastax/graph-rag/refs/heads/main/data/para_with_hyperlink_short.jsonl"
+
 
 async def aload_2wikimultihop(
-    para_with_hyperlink_zip_path: str, store: VectorStore, batch_prepare: BatchPreparer
+    limit: int | None,
+    *,
+    full_para_with_hyperlink_zip_path: str,
+    store: VectorStore,
+    batch_prepare: BatchPreparer,
 ) -> None:
     """
     Load 2wikimultihop data into the given `VectorStore`.
 
     Parameters
     ----------
-    para_with_hyperlink_zip_path :
+    limit :
+        Maximum number of lines to load.
+        If a number less than one thousand, limits loading to the given number of lines.
+        If `None`, loads all content.
+    full_para_with_hyperlink_zip_path :
         Path to `para_with_hyperlink.zip` downloaded following the instructions
         in
         [2wikimultihop](https://github.com/Alab-NII/2wikimultihop?tab=readme-ov-file#new-update-april-7-2021).
@@ -70,20 +82,45 @@ async def aload_2wikimultihop(
     batch_prepare :
         Function to apply to batches of lines to produce the document.
     """
-    assert os.path.isfile(para_with_hyperlink_zip_path)
+    if limit is None or limit > LINES_IN_FILE:
+        limit = LINES_IN_FILE
+
+    if limit <= 1000:
+        local_path = "../../data/para_with_hyperlink_short.jsonl"
+        if os.path.isfile(local_path):
+            for batch in batched(
+                itertools.islice(open(local_path, "rb").readlines(), limit), BATCH_SIZE
+            ):
+                docs = batch_prepare(iter(batch))
+                store.add_documents(list(docs))
+            print(f"Loaded from {local_path}")  # noqa: T201
+        else:
+            print(f"{local_path} not found, fetching short dataset")  # noqa: T201
+            response = requests.get(SHORT_URL)
+            response.raise_for_status()  # Ensure we get a valid response
+
+            for batch in batched(
+                itertools.islice(response.content.splitlines(), limit), BATCH_SIZE
+            ):
+                docs = batch_prepare(iter(batch))
+                store.add_documents(list(docs))
+            print(f"Loaded from {SHORT_URL}")  # noqa: T201
+        return
+
+    assert os.path.isfile(full_para_with_hyperlink_zip_path)
     persistence = PersistentIteration(
         journal_name="load_2wikimultihop.jrnl",
-        iterator=batched(wikipedia_lines(para_with_hyperlink_zip_path), BATCH_SIZE),
+        iterator=batched(
+            itertools.islice(wikipedia_lines(full_para_with_hyperlink_zip_path), limit),
+            BATCH_SIZE,
+        ),
     )
-    total_batches = ceil(LINES_IN_FILE / BATCH_SIZE) - persistence.completed_count()
+    total_batches = ceil(limit / BATCH_SIZE) - persistence.completed_count()
     if persistence.completed_count() > 0:
         print(  # noqa: T201
             f"Resuming loading with {persistence.completed_count()}"
             f" completed, {total_batches} remaining"
         )
-
-    # We can't use asyncio.TaskGroup in 3.10. This would be simpler with that.
-    tasks: list[asyncio.Task] = []
 
     @backoff.on_exception(
         backoff.expo,
@@ -102,11 +139,12 @@ async def aload_2wikimultihop(
                     print(err_desc)  # noqa: T201
             raise
 
+    # We can't use asyncio.TaskGroup in 3.10. This would be simpler with that.
+    tasks: list[asyncio.Task] = []
+
     for offset, batch_lines in tqdm(persistence, total=total_batches):
         batch_docs = batch_prepare(batch_lines)
         if batch_docs:
-            ids = [doc.id for doc in batch_docs]
-            assert len(set(ids)) == len(ids)
             task = asyncio.create_task(add_docs(batch_docs, offset))
 
             # It is OK if tasks are lost upon failure since that means we're
