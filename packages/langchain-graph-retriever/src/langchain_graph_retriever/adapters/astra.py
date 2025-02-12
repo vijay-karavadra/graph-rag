@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, cast
 
 import backoff
 from graph_retriever import Content
 from graph_retriever.edges import Edge, IdEdge, MetadataEdge
+from graph_retriever.utils import merge
 from graph_retriever.utils.batched import batched
 from graph_retriever.utils.top_k import top_k
 from typing_extensions import override
@@ -37,61 +37,91 @@ _EXCEPTIONS_TO_RETRY = (
 _MAX_RETRIES = 3
 
 
-class _QueryHelper:
-    def __init__(
-        self,
-        codec: _AstraDBVectorStoreDocumentCodec,
-        user_filter: dict[str, Any] | None = {},
-    ) -> None:
-        self.codec = codec
-        self.encoded_user_filter = (
-            codec.encode_filter(user_filter) if user_filter else {}
-        )
+def _extract_queries(edges: set[Edge]) -> tuple[dict[str, Iterable[Any]], set[str]]:
+    metadata: dict[str, set[Any]] = {}
+    ids: set[str] = set()
 
-    def encode_filter(self, filter: dict[str, Any]) -> dict[str, Any]:
-        encoded_filter = self.codec.encode_filter(filter)
-        return self._with_user_filter(encoded_filter)
-
-    def _with_user_filter(self, encoded_filter: dict[str, Any]) -> dict[str, Any]:
-        if self.encoded_user_filter:
-            return {"$and": [encoded_filter, self.encoded_user_filter]}
+    for edge in edges:
+        if isinstance(edge, MetadataEdge):
+            metadata.setdefault(edge.incoming_field, set()).add(edge.value)
+        elif isinstance(edge, IdEdge):
+            ids.add(edge.id)
         else:
-            return encoded_filter
+            raise ValueError(f"Unsupported edge {edge}")
 
-    def create_ids_query(self, ids: list[str]) -> dict[str, Any]:
-        if len(ids) == 0:
-            raise ValueError("IDs should not be empty")
-        elif len(ids) == 1:
-            # We need to avoid re-encoding in this case, since the codecs
-            # don't recognize `_id` and get confused (creating `metadata._id`).
-            return self._with_user_filter({"_id": ids[0]})
-        elif len(ids) < 100:
-            return self._with_user_filter({"_id": {"$in": ids}})
+    return (cast(dict[str, Iterable[Any]], metadata), ids)
+
+
+def _queries(
+    codec: _AstraDBVectorStoreDocumentCodec,
+    user_filters: dict[str, Any] | None,
+    *,
+    metadata: dict[str, Iterable[Any]] = {},
+    ids: Iterable[str] = (),
+) -> Iterator[dict[str, Any]]:
+    """
+    Generate queries for matching all user_filters and any `metadata`.
+
+    The results of the queries can be merged to produce the results.
+
+    Results will match at least one metadata value in one of the metadata fields
+    or one of the IDs.
+
+    Results will also match all of the `user_filters`.
+
+    Parameters
+    ----------
+    codec :
+        Codec to use for encoding the queries.
+    user_filters :
+        User filters that all results must match.
+    metadata :
+        An item matches the queries if it matches all user filters, and
+        there exists a `key` such that `metadata[key]` has a non-empty
+        intersection with the actual values of `item.metadata[key]`.
+    ids :
+        An item matches the queries if it matches all user filters, and
+        it has an `item.id` in `ids`.
+
+    Yields
+    ------
+    :
+        Queries corresponding to `user_filters AND (metadata OR ids)`.
+    """
+    if user_filters:
+        encoded_user_filters = codec.encode_filter(user_filters) if user_filters else {}
+
+        def with_user_filters(
+            filter: dict[str, Any], *, encoded: bool
+        ) -> dict[str, Any]:
+            return {
+                "$and": [
+                    filter if encoded else codec.encode_filter(filter),
+                    encoded_user_filters,
+                ]
+            }
+    else:
+
+        def with_user_filters(
+            filter: dict[str, Any], *, encoded: bool
+        ) -> dict[str, Any]:
+            return filter if encoded else codec.encode_filter(filter)
+
+    for k, v in metadata.items():
+        for v_batch in batched(v, 100):
+            batch = list(v_batch)
+            if len(batch) == 1:
+                yield (with_user_filters({k: batch[0]}, encoded=False))
+            else:
+                yield (with_user_filters({k: {"$in": batch}}, encoded=False))
+
+    for id_batch in batched(ids, 100):
+        ids = list(id_batch)
+        if len(ids) == 1:
+            yield with_user_filters({"_id": ids[0]}, encoded=True)
         else:
-            raise ValueError("IDs should be less than 100, was {len(ids)}")
-
-    def create_metadata_query(
-        self, metadata: dict[str, Iterable[Any]]
-    ) -> dict[str, Any] | None:
-        metadata = {k: v for k, v in metadata.items() if v}
-        if not metadata:
-            return None
-
-        parts = []
-        for k, v in metadata.items():
-            # If there are more than 100 values, we can't create a single `$in` query.
-            # But, we can do it for each batch of 100.
-            for v_batch in batched(v, 100):
-                batch = list(v_batch)
-                if len(batch) == 1:
-                    parts.append({k: batch[0]})
-                else:
-                    parts.append({k: {"$in": batch}})
-
-        if len(parts) == 1:
-            return self.encode_filter(parts[0])
-        else:
-            return self.encode_filter({"$or": parts})
+            assert len(ids) > 1 and len(ids) <= 100
+            yield with_user_filters({"_id": {"$in": ids}}, encoded=True)
 
 
 class AstraAdapter(Adapter):
@@ -233,78 +263,25 @@ class AstraAdapter(Adapter):
     def get(
         self, ids: Sequence[str], filter: dict[str, Any] | None = None, **kwargs: Any
     ) -> list[Content]:
-        helper = _QueryHelper(self.vector_store.document_codec, filter)
-
-        results: dict[str, Content] = {}
-        for batch in batched(set(ids), 100):
-            query = helper.create_ids_query(list(batch))
-
-            # TODO: Consider deduplicating before decoding?
-            for content in self._execute_query(query=query):
-                results.setdefault(content.id, content)
-        return list(results.values())
+        return self._execute_and_merge(
+            _queries(
+                codec=self.vector_store.document_codec,
+                user_filters=filter,
+                ids=set(ids),
+            )
+        )
 
     @override
     async def aget(
         self, ids: Sequence[str], filter: dict[str, Any] | None = None, **kwargs: Any
     ) -> list[Content]:
-        helper = _QueryHelper(self.vector_store.document_codec, filter)
-
-        tasks = set()
-        for batch in batched(set(ids), 100):
-            query = helper.create_ids_query(list(batch))
-            tasks.add(asyncio.create_task(self._aexecute_query(query=query)))
-
-        results: dict[str, Content] = {}
-        while tasks:
-            done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
+        return await self._aexecute_and_merge(
+            _queries(
+                codec=self.vector_store.document_codec,
+                user_filters=filter,
+                ids=set(ids),
             )
-            tasks = pending
-
-            # TODO: Consider deduplicating before decoding?
-            for contents in done:
-                for content in await contents:
-                    results.setdefault(content.id, content)
-
-        return list(results.values())
-
-    def _prepare_edge_query_parts(
-        self, edges: set[Edge]
-    ) -> tuple[dict[str, Iterable[Any]], set[str]]:
-        """
-        Return metadata and ID query parts for edges.
-
-        Parameters
-        ----------
-        edges :
-            The edges to prepare.
-
-        Returns
-        -------
-        metadata_in :
-            Dictionary of metadata constraints indicating the field to constrain
-            and the set of values.
-        ids :
-            Set of IDs to query for.
-
-        Raises
-        ------
-        ValueError
-            If any edges are invalid.
-        """
-        metadata_in: dict[str, set[Any]] = {}
-        ids = set()
-
-        for edge in edges:
-            if isinstance(edge, MetadataEdge):
-                metadata_in.setdefault(edge.incoming_field, set()).add(edge.value)
-            elif isinstance(edge, IdEdge):
-                ids.add(edge.id)
-            else:
-                raise ValueError(f"Unsupported edge {edge}")
-
-        return (cast(dict[str, Iterable[Any]], metadata_in), ids)
+        )
 
     @override
     def adjacent(
@@ -315,30 +292,20 @@ class AstraAdapter(Adapter):
         filter: dict[str, Any] | None,
         **kwargs: Any,
     ) -> Iterable[Content]:
-        query_helper = _QueryHelper(self.vector_store.document_codec, filter)
-        metadata, ids = self._prepare_edge_query_parts(edges)
-
         sort = self.vector_store.document_codec.encode_vector_sort(query_embedding)
+        metadata, ids = _extract_queries(edges)
+        filters = _queries(
+            codec=self.vector_store.document_codec,
+            user_filters=filter,
+            metadata=metadata,
+            ids=ids,
+        )
 
-        results = []
-        if (metadata_query := query_helper.create_metadata_query(metadata)) is not None:
-            batch = self._execute_query(
-                limit=k,
-                sort=sort,
-                query=metadata_query,
-            )
-            results.extend(batch)
-            ids.difference_update({c.id for c in batch})
-
-        for id_batch in batched(ids, 100):
-            results.extend(
-                self._execute_query(
-                    limit=k,
-                    sort=sort,
-                    query=query_helper.create_ids_query(list(id_batch)),
-                )
-            )
-
+        results = self._execute_and_merge(
+            filters=filters,
+            sort=sort,
+            limit=k,
+        )
         return top_k(results, embedding=query_embedding, k=k)
 
     @override
@@ -350,38 +317,25 @@ class AstraAdapter(Adapter):
         filter: dict[str, Any] | None,
         **kwargs: Any,
     ) -> Iterable[Content]:
-        query_helper = _QueryHelper(self.vector_store.document_codec, filter)
-        metadata, ids = self._prepare_edge_query_parts(edges)
-
         sort = self.vector_store.document_codec.encode_vector_sort(query_embedding)
+        metadata, ids = _extract_queries(edges)
+        filters = _queries(
+            codec=self.vector_store.document_codec,
+            user_filters=filter,
+            metadata=metadata,
+            ids=ids,
+        )
 
-        results = []
-        if (metadata_query := query_helper.create_metadata_query(metadata)) is not None:
-            batch = await self._aexecute_query(
-                limit=k,
-                sort=sort,
-                query=metadata_query,
-            )
-            results.extend(batch)
-            ids.difference_update({c.id for c in batch})
-
-        for id_batch in batched(ids, 100):
-            # I have tested (in the lazy graph rag example) doing these
-            # two queries concurrently, but it hurt perfomance. Likely this
-            # would depend on how many IDs the previous query eliminates from
-            # this query.
-            result_batch = await self._aexecute_query(
-                limit=k,
-                sort=sort,
-                query=query_helper.create_ids_query(list(id_batch)),
-            )
-            results.extend(result_batch)
-
+        results = await self._aexecute_and_merge(
+            filters=filters,
+            sort=sort,
+            limit=k,
+        )
         return top_k(results, embedding=query_embedding, k=k)
 
-    def _execute_query(
+    def _execute_and_merge(
         self,
-        query: dict[str, Any] | None = None,
+        filters: Iterator[dict[str, Any]],
         limit: int | None = None,
         sort: dict[str, Any] | None = None,
     ) -> list[Content]:
@@ -395,20 +349,31 @@ class AstraAdapter(Adapter):
         include_similarity = None
         if not (sort or {}).keys().isdisjoint({"$vector", "$vectorize"}):
             include_similarity = True
-        hits = astra_env.collection.find(
-            filter=query,
-            projection=self.vector_store.document_codec.full_projection,
-            limit=limit,
-            include_sort_vector=True,
-            include_similarity=include_similarity,
-            sort=sort,
-        )
 
-        return [content for hit in hits if (content := self._decode_hit(hit))]
+        results: dict[str, Content] = {}
+        for filter in filters:
+            # TODO: Look at a thread-pool for this.
+            hits = astra_env.collection.find(
+                filter=filter,
+                projection=self.vector_store.document_codec.full_projection,
+                limit=limit,
+                include_sort_vector=True,
+                include_similarity=include_similarity,
+                sort=sort,
+            )
 
-    async def _aexecute_query(
+            for hit in hits:
+                if (
+                    hit["_id"] not in results
+                    and (content := self._decode_hit(hit)) is not None
+                ):
+                    results[content.id] = content
+
+        return list(results.values())
+
+    async def _aexecute_and_merge(
         self,
-        query: dict[str, Any] | None = None,
+        filters: Iterator[dict[str, Any]],
         limit: int | None = None,
         sort: dict[str, Any] | None = None,
     ) -> list[Content]:
@@ -422,16 +387,29 @@ class AstraAdapter(Adapter):
         include_similarity = None
         if not (sort or {}).keys().isdisjoint({"$vector", "$vectorize"}):
             include_similarity = True
-        hits = astra_env.async_collection.find(
-            filter=query,
-            projection=self.vector_store.document_codec.full_projection,
-            limit=limit,
-            include_sort_vector=True,
-            include_similarity=include_similarity,
-            sort=sort,
-        )
 
-        return [content async for hit in hits if (content := self._decode_hit(hit))]
+        cursors = []
+        for filter in filters:
+            cursors.append(
+                astra_env.async_collection.find(
+                    filter=filter,
+                    limit=limit,
+                    projection=self.vector_store.document_codec.full_projection,
+                    include_sort_vector=True,
+                    include_similarity=include_similarity,
+                    sort=sort,
+                )
+            )
+
+        results: dict[str, Content] = {}
+        async for hit in merge.amerge(*cursors):
+            if (
+                hit["_id"] not in results
+                and (content := self._decode_hit(hit)) is not None
+            ):
+                results[content.id] = content
+
+        return list(results.values())
 
     def _decode_hit(self, hit: dict[str, Any]) -> Content | None:
         codec = self.vector_store.document_codec
