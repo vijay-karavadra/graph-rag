@@ -56,7 +56,9 @@ class AdapterComplianceCase(abc.ABC):
 
     id: str
     expected: list[str]
+
     requires_nested: bool = False
+    requires_dict_in_list: bool = False
 
 
 @dataclass
@@ -192,6 +194,50 @@ ADJACENT_CASES: list[AdjacentCase] = [
         ],
     ),
     AdjacentCase(
+        id="numeric",
+        query="domesticated hunters",
+        edges={
+            MetadataEdge("number_of_legs", 0),
+        },
+        k=20,  # more than match the filter so we get all
+        expected=[
+            "barracuda",
+            "cobra",
+            "dolphin",
+            "eel",
+            "fish",
+            "jellyfish",
+            "manatee",
+            "narwhal",
+        ],
+    ),
+    AdjacentCase(
+        id="two_edges_diff_field",
+        query="domesticated hunters",
+        edges={
+            MetadataEdge("type", "reptile"),
+            MetadataEdge("number_of_legs", 0),
+        },
+        k=20,  # more than match the filter so we get all
+        expected=[
+            "alligator",
+            "barracuda",
+            "chameleon",
+            "cobra",
+            "crocodile",
+            "dolphin",
+            "eel",
+            "fish",
+            "gecko",
+            "iguana",
+            "jellyfish",
+            "komodo dragon",
+            "lizard",
+            "manatee",
+            "narwhal",
+        ],
+    ),
+    AdjacentCase(
         id="one_ids",
         query="domesticated hunters",
         edges={
@@ -263,6 +309,39 @@ ADJACENT_CASES: list[AdjacentCase] = [
         ],
     ),
     AdjacentCase(
+        id="dict_in_list",
+        query="domesticated hunters",
+        edges={
+            MetadataEdge("tags", {"a": 5, "b": 7}),
+        },
+        expected=[
+            "aardvark",
+        ],
+        requires_dict_in_list=True,
+    ),
+    AdjacentCase(
+        id="dict_in_list_multiple",
+        query="domesticated hunters",
+        edges={
+            MetadataEdge("tags", {"a": 5, "b": 7}),
+            MetadataEdge("tags", {"a": 5, "b": 8}),
+        },
+        expected=[
+            "aardvark",
+            "albatross",
+        ],
+        requires_dict_in_list=True,
+    ),
+    AdjacentCase(
+        id="absent_dict",
+        query="domesticated hunters",
+        edges={
+            MetadataEdge("tags", {"a": 5, "b": 10}),
+        },
+        expected=[],
+        requires_dict_in_list=True,
+    ),
+    AdjacentCase(
         id="nested",
         query="domesticated hunters",
         edges={
@@ -318,6 +397,10 @@ class AdapterComplianceSuite(abc.ABC):
         """Return whether nested metadata is expected to work."""
         return True
 
+    def supports_dict_in_list(self) -> bool:
+        """Return whether dicts can appear in list fields in metadata."""
+        return True
+
     def expected(self, method: str, case: AdapterComplianceCase) -> list[str]:
         """
         Override to change the expected behavior of a case.
@@ -346,6 +429,8 @@ class AdapterComplianceSuite(abc.ABC):
         """
         if not self.supports_nested_metadata() and case.requires_nested:
             pytest.xfail("nested metadata not supported")
+        if not self.supports_dict_in_list() and case.requires_dict_in_list:
+            pytest.xfail("dict-in-list fields is not supported")
         return case.expected
 
     @pytest.fixture(params=GET_CASES, ids=lambda c: c.id)

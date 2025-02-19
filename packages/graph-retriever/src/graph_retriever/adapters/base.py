@@ -5,6 +5,8 @@ import asyncio
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+from immutabledict import immutabledict
+
 from graph_retriever.content import Content
 from graph_retriever.edges import Edge, IdEdge, MetadataEdge
 from graph_retriever.utils.run_in_executor import run_in_executor
@@ -355,8 +357,8 @@ class Adapter(abc.ABC):
 
     def _metadata_filter(
         self,
+        edge: Edge,
         base_filter: dict[str, Any] | None = None,
-        edge: Edge | None = None,
     ) -> dict[str, Any]:
         """
         Return a filter for the `base_filter` and incoming edges from `edge`.
@@ -376,10 +378,8 @@ class Adapter(abc.ABC):
         :
             The metadata dictionary to use for the given filter.
         """
-        metadata_filter = {**(base_filter or {})}
         assert isinstance(edge, MetadataEdge)
-        if edge is None:
-            metadata_filter
-        else:
-            metadata_filter[edge.incoming_field] = edge.value
-        return metadata_filter
+        value = edge.value
+        if isinstance(value, immutabledict):
+            value = dict(value)
+        return {edge.incoming_field: value, **(base_filter or {})}

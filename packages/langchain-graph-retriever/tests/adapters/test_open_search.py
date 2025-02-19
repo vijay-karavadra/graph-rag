@@ -11,6 +11,9 @@ class TestOpenSearch(AdapterComplianceSuite):
     def supports_nested_metadata(self) -> bool:
         return False
 
+    def supports_dict_in_list(self) -> bool:
+        return False
+
     @pytest.fixture(scope="class")
     def adapter(
         self,

@@ -6,7 +6,6 @@ from typing import Any, Generic, TypeVar
 
 from graph_retriever import Content
 from graph_retriever.adapters import Adapter
-from graph_retriever.edges import Edge, MetadataEdge
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables import run_in_executor
@@ -357,37 +356,6 @@ class LangchainAdapter(Generic[StoreT], Adapter):
             filter,
             **kwargs,
         )
-
-    def _metadata_filter(
-        self,
-        base_filter: dict[str, Any] | None = None,
-        edge: Edge | None = None,
-    ) -> dict[str, Any]:
-        """
-        Return a filter for the `base_filter` and incoming edges from `edge`.
-
-        Parameters
-        ----------
-        base_filter :
-            Any base metadata filter that should be used for search.
-            Generally corresponds to the user specified filters for the entire
-            traversal. Should be combined with the filters necessary to support
-            nodes with an *incoming* edge matching `edge`.
-        edge :
-            An optional edge which should be added to the filter.
-
-        Returns
-        -------
-        :
-            The metadata dictionary to use for the given filter.
-        """
-        metadata_filter = {**(base_filter or {})}
-        assert isinstance(edge, MetadataEdge)
-        if edge is None:
-            metadata_filter
-        else:
-            metadata_filter[edge.incoming_field] = edge.value
-        return metadata_filter
 
 
 class ShreddedLangchainAdapter(LangchainAdapter[StoreT]):
