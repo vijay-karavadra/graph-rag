@@ -1,21 +1,41 @@
+---
+i:
+    y: :material-check-circle:{.green}
+    n: :material-close-circle:{.red}
+    m: :material-alert-circle:{.yellow}
+---
+
 # Adapters
 
 Adapters allow `graph-retriever` to connect to specific vector stores.
 
-| Vector Store                   | Supported                       | Collection Support               | Optimized Adjacency             |
-| ------------------------------ | | | |
-| [DataStax Astra](#astra)       | :material-check-circle:{.green} | :material-check-circle:{.green}  | :material-check-circle:{.green} |
-| [OpenSearch](#opensearch)      | :material-check-circle:{.green} | :material-check-circle:{.green}  |                                 |
-| [Apache Cassandra](#cassandra) | :material-check-circle:{.green} | :material-alert-circle:{.yellow} |                                 |
-| [Chroma](#chroma)              | :material-check-circle:{.green} | :material-alert-circle:{.yellow} |                                 |
+| Vector Store                   | Supported | Collections | Dict-In-List | Nested Metadata | Optimized Adjacency |
+| ------------------------------ | :-------: | :---------: | :----------: | :-------------: | :-----------------: |
+| [DataStax Astra](#astra)       | {{ i.y }} | {{ i.y }}   | {{ i.y }}    | {{ i.y }}       | {{ i.y }}           |
+| [OpenSearch](#opensearch)      | {{ i.y }} | {{ i.y }}   | {{ i.n }}    | {{ i.n }}       | {{ i.n }}           |
+| [Apache Cassandra](#cassandra) | {{ i.y }} | {{ i.m }}   | {{ i.y }}    | {{ i.n }}       | {{ i.n }}           |
+| [Chroma](#chroma)              | {{ i.y }} | {{ i.m }}   | {{ i.y }}    | {{ i.n }}       | {{ i.n }}           |
 
 __Supported__
 
 : Indicates whether a given store is completely supported (:material-check-circle:{.green}) or has limited support (:material-alert-circle:{.yellow}).
 
-__Collection Support__
+__Collections__
 
 : Indicates whether the store supports lists in metadata values or not. Stores which do not support it directly (:material-alert-circle:{.yellow}) can be used by applying the [ShreddingTransformer][langchain_graph_retriever.transformers.ShreddingTransformer] document transformer to documents before writing, which spreads the items of the collection into multiple metadata keys.
+
+__Dict-In-List__
+
+: Indicates the store supports using a dict-value in a list for edges. For
+example, when using named-entity recognition, you may have `entities = [{"type":
+"PERSON", "entity": "Bell"}, ...]` and wish to link nodes with the same entity
+using an edge defined as `("entities", "entities")`.
+
+__Nested Metadata__
+
+: Whether edges can be defined using values of nested metadata. For example,
+`page_structure.section` to access the section ID stored in metadata as
+`metadata["page_structure"] = { "section": ... }`.
 
 __Optimized Adjacency__
 
