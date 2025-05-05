@@ -1,6 +1,16 @@
 # Examples
 
 <div class="grid cards" markdown>
+
+-   :material-code-braces-box:{ .lg .middle } __Connecting Movies and Reviews__
+
+    ---
+    This example shows how to build a system that can search movie reviews for certain types 
+    of comments---such as “What is a good family movie?”---and then immediately connect the 
+    resulting reviews to the movies they are discussing.
+
+    [:material-fast-forward: Movie Reviews Example](movie-reviews-graph-rag.ipynb)
+    
 -   :material-code-braces-box:{ .lg .middle } __Lazy Graph RAG__
 
     ---
